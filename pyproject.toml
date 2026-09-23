@@ -1,0 +1,19 @@
+[project]
+name = "dema"
+version = "0.1.0"
+description = "DeMa — Decision-based Schema Matching (research codebase)"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy", "pandas", "PyYAML", "requests", "torch", "transformers", "sentence-transformers",
+    "huggingface_hub", "valentine>=1.0,<2", "rapidfuzz", "openpyxl",
+]
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src", "tests"]
+testpaths = ["tests"]

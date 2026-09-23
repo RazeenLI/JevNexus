@@ -1,0 +1,40 @@
+seed: 42
+
+datasets:
+  - GDC
+  - ChEMBL
+  - Magellan
+  - OpenData
+  - TPC-DI
+  - WikiData
+
+methods:
+  - coma
+  - coma_plus
+  - distribution
+  - similarity_flooding
+  - isresmat
+  - unicorn
+  - magneto_qwen
+  - dema
+
+resume: true
+save_full_rankings: true
+save_runtime: true
+
+# continue | abort — what the runner does after a case finally fails.
+on_failure: continue
+
+# --save-debug stores full model requests/responses for at most this many cases per run.
+debug_max_cases: 3
+
+smoke_test:
+  cases:
+    - dataset: GDC
+      index: 0
+    - dataset: OpenData
+      index: 0
+  methods:
+    - coma
+    - magneto_qwen
+    - dema

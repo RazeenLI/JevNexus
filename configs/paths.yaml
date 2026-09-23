@@ -1,0 +1,47 @@
+# All relative paths are resolved against the repository root.
+raw_data: data/raw
+processed_data: data/processed
+manifest: data/manifests/all.jsonl
+outputs: outputs
+
+# Raw benchmark sources (Magneto evaluation collection).
+# Archives are stored under <raw_data>/downloads and never modified.
+downloads:
+  gdc:
+    # GDC-SM: The GDC Schema Matching Benchmark (Zenodo 10.5281/zenodo.14963588).
+    # The archive contains ground truth + the GDC target table; source tables are
+    # rebuilt from the papers' supplementary files by the official procedure
+    # (papers_info.json + gdc_download.py, re-implemented in dema.data.download).
+    files:
+      gdc-sm-data.zip: https://zenodo.org/api/records/14963588/files/gdc-sm-data.zip/content
+      papers_info.json: https://zenodo.org/api/records/14963588/files/papers_info.json/content
+      gdc_download.py: https://zenodo.org/api/records/14963588/files/gdc_download.py/content
+  valentine:
+    # Valentine datasets (Zenodo 10.5281/zenodo.5084605).
+    files:
+      Valentine-datasets.zip: https://zenodo.org/api/records/5084605/files/Valentine-datasets.zip/content
+
+# Layout of the extracted raw benchmark (relative to raw_data).
+raw_layout:
+  gdc_root: gdc/data
+  gdc_target: target-tables/gdc_unique_columns_concat_values.csv
+  valentine_root: valentine/Valentine-datasets
+  # internal dataset name -> directory under valentine_root
+  valentine_datasets:
+    ChEMBL: ChEMBL
+    Magellan: Magellan
+    OpenData: OpenData
+    TPC-DI: TPC-DI
+    WikiData: Wikidata
+
+# Ground-truth pairs in the *raw* benchmark that reference a column absent from
+# the table. The ground truth is never edited; these pairs stay in the benchmark
+# and can never be predicted (they count as misses, like in Magneto's evaluation).
+# The integrity check fails on any invalid reference not listed here.
+known_gt_defects:
+  - case_id: wikidata_musicians_unionable
+    source_column: givenName
+    target_column: forename
+  - case_id: wikidata_musicians_viewunion
+    source_column: givenName
+    target_column: forename

@@ -1,0 +1,20 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+
+# Benchmark data is downloaded/derived, never committed.
+data/raw/*
+data/processed/*
+data/manifests/*
+!data/**/.gitkeep
+
+# Experiment outputs.
+outputs/*
+!outputs/*/
+outputs/*/*
+!outputs/*/.gitkeep
+
+# Local model checkpoints / serving environments.
+checkpoints/

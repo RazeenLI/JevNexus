@@ -1,0 +1,158 @@
+# Model and matcher configuration. Every experimental constant lives here or in
+# experiment.yaml / scalability.yaml; Python code only supplies structure.
+
+representation:
+  version: v1            # bump whenever profiling/serialization changes (part of cache key)
+  max_values: 10
+  sampling: frequency    # only "frequency" is supported (deterministic, no random sampling)
+  include_dtype: true
+  max_value_chars: 64    # a single sampled value is truncated to this many characters
+  datetime_min_fraction: 0.9   # fraction of non-null values that must parse as dates
+  type_min_fraction: 1.0       # fraction required for integer/float/boolean
+  mixed_min_numeric_fraction: 0.2  # numeric share in [this, 1) => "mixed"
+
+retriever:
+  model: sentence-transformers/all-mpnet-base-v2
+  top_k: 20
+  batch_size: 64
+  device: auto           # auto | cpu | cuda | cuda:N
+  normalize: true
+
+# Shared by magneto_qwen and dema: both rerankers see identical information.
+reranking:
+  # Candidates are presented (and given ids c0..c{k-1}) in target-schema column
+  # order, never in retrieval order, so neither reranker can infer retrieval rank.
+  candidate_order: target_schema
+  candidate_id_prefix: c
+
+qwen:
+  prompt:
+    system: You are an expert in database schema matching.
+    task: |-
+      Decide, for every candidate target column, whether it represents the same underlying schema attribute as the source column. Judge each candidate independently and give a semantic matching score between 0 and 1 (1 = certainly the same attribute, 0 = certainly a different attribute).
+      Return only a JSON object that maps every candidate id to its score, using exactly these ids: {ids}. Do not include explanations or any other text.
+  model: Qwen/Qwen3.5-9B
+  served_model_name: Qwen/Qwen3.5-9B
+  base_url: http://127.0.0.1:8000/v1
+  temperature: 0
+  max_tokens: 1024
+  enable_thinking: false     # same non-thinking mode used by CoRE
+  timeout: 300
+  max_retries: 3             # additional attempts after the first one
+  api_key_env: QWEN_API_KEY  # optional; the key is read from this env var and never logged
+
+decision:
+  backend: system_one
+  model: ZefanCai/Open-Jev-9B
+  base_url: http://127.0.0.1:8009
+  endpoint: /v1/systemone
+  request_model: null     # value of the request "model" field (null = omit; the server uses its loaded model)
+  timeout: 300
+  max_retries: 3
+  # How candidate information is laid out in the System One request:
+  #   shared: state = source column + all candidates; one noul question per candidate id
+  #   single: state = source column; each question carries its own candidate description
+  candidate_context: shared
+  api_key_env: DECISION_API_KEY
+  prompt:
+    question: Does candidate {cid} represent the same underlying schema attribute as the source column?
+    question_single: |-
+      Does the following target column represent the same underlying schema attribute as the source column?
+      {candidate}
+    criteria:
+      "true": Both columns describe the same real-world attribute; values of one could be mapped to the other.
+      "false": The columns describe different attributes.
+
+# Model servers (used only by scripts/serve_*.sh, never by the experiment code).
+serving:
+  qwen:
+    backend: auto            # auto | vllm | hf  (auto: vllm if importable, else built-in HF server)
+    host: 127.0.0.1
+    port: 8000
+    dtype: bfloat16
+    max_model_len: 32768
+    gpu_memory_utilization: 0.85
+    device_map: auto
+  decision:
+    host: 127.0.0.1
+    port: 8009
+    # Open-Jev-9B package: LoRA adapter + scalar decision head for the pinned
+    # Qwen3.5-9B revision below.
+    hf_repo: ZefanCai/Open-Jev-9B
+    hf_revision: 47e966881e489511c0c7f5633a9e1960a676a551
+    local_dir: checkpoints/open-jev-9b
+    checkpoint_subdir: package/checkpoint
+    base_model_revision: c202236235762e1c871ad0ccb60c8ee5ba337b9a
+    max_length: 4096
+    device: cuda:0
+
+# ---------------------------------------------------------------- baselines
+baselines:
+  coma:
+    # COMA schema-only (valentine pure-Python COMA). delta=1.0 / threshold=0 keep
+    # every scored pair so that a complete ranking can be produced.
+    use_schema: true
+    use_instances: false
+    max_n: 0
+    delta: 1.0
+    threshold: 0.0
+    instance_sample_size: 1000
+  coma_plus:
+    # COMA++ = COMA with the instance matcher enabled (Magneto's "ComaInst").
+    use_schema: true
+    use_instances: true
+    max_n: 0
+    delta: 1.0
+    threshold: 0.0
+    instance_weight: 1.0
+    instance_sample_size: 500
+  distribution:
+    threshold1: 0.15
+    threshold2: 0.15
+    quantiles: 256
+    process_num: 1
+    use_bloom_filters: false
+  similarity_flooding:
+    coeff_policy: inverse_average
+    formula: formula_c
+    string_matcher: prefix_suffix
+  jaccard:
+    threshold_dist: 0.8
+  levenshtein: {}
+  isresmat:
+    encoder: bert-base-uncased
+    device: auto
+    seed: 42
+    n_trn_cols: 200
+    batch_size: 1
+    frag_height: 6
+    frag_width: 12
+    learning_rate: 3.0e-5
+    col_name_prob: 0.5
+    output_repr_dim: 512
+    temperature: 1.0
+    t_dist_scale_factor: 10
+    cols_repr_init_std: 0.0005
+    meta_match_loss_weight: 1.0
+    agent_delegate_loss_weight: 1.0
+    rec_loss_weight: 0.2
+    rec_warmup_fraction: 0.3
+    sk_n_iter: 5
+    sk_reg_weight: 20
+    numerical_col_bins: 20
+    numerical_col_window_size: 10
+    max_input_length: 512
+  unicorn:
+    encoder: microsoft/deberta-base
+    checkpoint_repo: RUC-DataLab/unicorn-plus-v1
+    checkpoint_revision: 8fcc213b6d0c7f315c6044b4837810b32434c775
+    checkpoint_prefix: UnicornPlus
+    checkpoint_dir: null      # optional local directory overriding the HF download
+    device: auto
+    max_seq_length: 128
+    batch_size: 128
+    max_values: 20            # first N unique values per column, as in the reference
+    expertsnum: 6
+    size_output: 768
+    units: 768
+    score: match_logit        # match_logit (reference behaviour) | match_probability
