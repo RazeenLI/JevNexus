@@ -29,45 +29,60 @@ DeMa 的 reranking 为 1.194 秒（4 requests、3,684 input tokens、无重试�
 
 Qwen server 若没有 vLLM 会退回 Transformers server。该 fallback 为保证可运行而设计，生成使用全局锁，吞吐量明显低于 vLLM；正式全量实验应优先安装并使用兼容版本的 vLLM。
 
-## 当前基础版本与效果
+## 当前主方法与消融
 
-旧版仅使用 Jev 的排序存在明显的数据集差异，因此当前基础版本改为训练-free 的
-`dema_fusion`：保持 Magneto Top-20 候选，使用 Jev-Single 和 COMA++ 并行打分，再按
-下面的固定原始分数公式重排：
+当前主方法 `dema` 保持 Magneto Top-20 候选，使用 Jev-Single 和 COMA++ 并行打分，
+先按下面的固定原始分数公式融合，再由 `jinaai/jina-reranker-v3.5` 对 Top-3 做
+listwise 重排：
 
 ```text
 final_score = 0.4 × jev_score + 0.6 × coma_plus_score
 ```
 
 COMA++ 经过双向筛选后未输出的 pair 记为 0，Top-20 之外的 retrieval tail 不变。公式
-不按 dataset 分支，也不使用训练得到的 ranker。
+不按 dataset 分支；Jina revision 固定，且不在本 benchmark 上训练。
+
+正式方法名如下。R 表示 Jina reranker，S 表示 COMA++ structured matcher：
+
+| code | paper name | pipeline |
+|---|---|---|
+| `dema` | DeMa | Magneto candidates → Jev + COMA++ → Jina |
+| `dema_no_rerank` | DeMa−R | Magneto candidates → Jev + COMA++ |
+| `dema_no_struct` | DeMa−S | Magneto candidates → Jev → Jina |
+| `dema_decision` | DeMa−R−S | Magneto candidates → Jev |
+| `dema_shared` | DeMa-Shared | Magneto candidates → Jev shared-context |
 
 当前 `experiment_dev.yaml` 29 个有效 case 的 case-macro 结果：
 
 | method | MRR | Recall@GT | Recall@20 | NDCG@10 | MAP |
 |---|---:|---:|---:|---:|---:|
 | Magneto-Qwen | 0.9501 | 0.8259 | 0.9683 | 0.9500 | 0.9431 |
-| **DeMa-Fusion** | **0.9343** | **0.8050** | **0.9683** | **0.9401** | **0.9287** |
+| **DeMa** | **0.9611** | **0.8020** | **0.9683** | **0.9593** | **0.9540** |
+| DeMa−R | 0.9343 | 0.8050 | 0.9683 | 0.9401 | 0.9287 |
+| DeMa−S | 0.9375 | 0.6990 | 0.9683 | 0.9409 | 0.9298 |
 | COMA++ | 0.9162 | 0.7382 | 0.9000 | 0.9089 | 0.9037 |
-| DeMa-Single | 0.8845 | 0.6778 | 0.9683 | 0.9023 | 0.8781 |
+| DeMa−R−S | 0.8845 | 0.6778 | 0.9683 | 0.9023 | 0.8781 |
 
-`dema_fusion` 的结果是对已保存的候选级分数进行真实固定公式复算，不是逐 case 查看
-ground truth 后选择较优方法的 oracle。正式 matcher 已固化同一公式；首次正式运行前的
-约 17.1 秒/case 仅为 DeMa-Single 与 COMA++ 现有平均时间之和，不能替代 runner 实测。
+所有四种方法都已通过统一 runner 完整运行。实测平均时间分别为 DeMa 17.62 秒/case、
+DeMa−R 16.89 秒、DeMa−S 16.85 秒、DeMa−R−S 16.59 秒；Magneto-Qwen 为
+133.72 秒/case。
 
 各数据集 MRR 显示剩余问题主要集中在 ChEMBL：
 
 | method | ChEMBL | GDC | Magellan | OpenData | TPC-DI | WikiData |
 |---|---:|---:|---:|---:|---:|---:|
 | Magneto-Qwen | 1.0000 | 0.7768 | 1.0000 | 0.9887 | 0.9933 | 0.9396 |
-| DeMa-Fusion | 0.8604 | 0.8133 | 1.0000 | 0.9887 | 1.0000 | 0.9458 |
+| DeMa | 1.0000 | 0.8477 | 1.0000 | 0.9944 | 0.9933 | 0.9240 |
+| DeMa−R | 0.8604 | 0.8133 | 1.0000 | 0.9887 | 1.0000 | 0.9458 |
+| DeMa−S | 0.9373 | 0.8230 | 0.9857 | 0.9804 | 1.0000 | 0.8885 |
 | COMA++ | 0.9758 | 0.5972 | 1.0000 | 0.9840 | 1.0000 | 0.9458 |
-| DeMa-Single | 0.7894 | 0.7578 | 0.9217 | 0.9737 | 0.9933 | 0.8677 |
+| DeMa−R−S | 0.7894 | 0.7578 | 0.9217 | 0.9737 | 0.9933 | 0.8677 |
 
-## 下一步验证顺序
+主方法相对 Magneto-Qwen 的 case-macro MRR 从 0.9501 提升到 0.9611，同时平均运行时间
+约为其 13.2%。消融说明 structured matcher 与 listwise reranker 都提供增益；两者同时
+移除时退化最明显。Recall@GT 仍略低于 Magneto，后续工作应优先分析候选覆盖与 Jina
+重排造成的 recall/ranking 取舍，而不是继续增加未经验证的融合分支。
 
-1. 用统一 runner 正式执行 `dema_fusion`，确认保存结果与离线复算完全一致并实测时间。
-2. 根据 COMA++/Jev 的置信度差和排序一致性设计动态权重，重点检查 ChEMBL。
-3. 单独评估只处理低置信度 Top-3/Top-5 的小型 LLM ranker，并报告调用率和延迟。
-4. 保留 `dema_single`、`dema_shared`、`dema_own_retrieval` 和旧 `dema` 作为消融，
-   不覆盖其已有 prediction。
+旧名称 `dema_jina_rerank`、`dema_fusion`、`dema_jina_no_coma`、`dema_single` 仅作为
+兼容入口保留。早期自有 retriever + Jev-Single 的旧 `dema` 行为现名为 `dema_legacy`；
+历史结果文件不移动、不覆盖。

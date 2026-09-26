@@ -25,11 +25,18 @@ log = get_console_logger("dema.services")
 
 METHOD_SERVICE = {
     "magneto_qwen": "qwen",
+    "dema": "decision",
+    "dema_no_rerank": "decision",
+    "dema_no_struct": "decision",
+    "dema_decision": "decision",
     "dema_fusion": "decision",
+    "dema_jev_weight": "decision",
+    "dema_jina_rerank": "decision",
+    "dema_jina_no_coma": "decision",
     "dema_shared": "decision",
     "dema_single": "decision",
     "dema_own_retrieval": "decision",
-    "dema": "decision",  # legacy compatibility
+    "dema_legacy": "decision",
 }
 
 

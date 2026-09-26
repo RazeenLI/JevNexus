@@ -173,11 +173,23 @@ def method_fingerprint(config: Config, method: str) -> str:
             "representation", "retriever", "reranking", "decision"
         )}
         settings["variant"] = method
-        if method in ("dema_fusion", "dema_shared", "dema_single"):
+        if method in (
+            "dema", "dema_no_rerank", "dema_no_struct", "dema_decision",
+            "dema_fusion", "dema_jev_weight", "dema_jina_rerank", "dema_jina_no_coma",
+            "dema_shared", "dema_single"
+        ):
             settings["magneto_candidates"] = config.models["magneto"]
-        if method == "dema_fusion":
+        if method in (
+            "dema", "dema_no_rerank", "dema_fusion", "dema_jev_weight", "dema_jina_rerank"
+        ):
             settings["fusion"] = config.models["fusion"]
             settings["coma_plus"] = config.models["baselines"]["coma_plus"]
+        if method == "dema_jev_weight":
+            settings["dynamic_weight"] = config.models["dynamic_weight"]
+        if method in ("dema", "dema_jina_rerank"):
+            settings["jina_rerank"] = config.models["jina_rerank"]
+        if method in ("dema_no_struct", "dema_jina_no_coma"):
+            settings["jina_rerank"] = config.models["jina_rerank"]
     elif method == "magneto_qwen":
         settings = {name: config.models[name] for name in ("magneto", "qwen")}
     else:

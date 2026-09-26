@@ -54,9 +54,13 @@ def main(argv: list[str] | None = None) -> int:
 
     methods = set(config.experiment["methods"])
     fills = []
-    if methods & {"dema_fusion", "dema_shared", "dema_single"}:
+    if methods & {
+        "dema", "dema_no_rerank", "dema_no_struct", "dema_decision",
+        "dema_fusion", "dema_jev_weight", "dema_jina_rerank", "dema_jina_no_coma",
+        "dema_shared", "dema_single",
+    }:
         fills.append(fill_magneto)
-    if methods & {"dema_own_retrieval", "dema"}:
+    if methods & {"dema_own_retrieval", "dema_legacy"}:
         fills.append(fill_own)
 
     hits = computed = 0
@@ -70,9 +74,13 @@ def main(argv: list[str] | None = None) -> int:
         scfg = load_yaml(resolve_path(args.scalability))
         scalability_methods = set(scfg["methods"])
         scalability_fills = []
-        if scalability_methods & {"dema_fusion", "dema_shared", "dema_single"}:
+        if scalability_methods & {
+            "dema", "dema_no_rerank", "dema_no_struct", "dema_decision",
+            "dema_fusion", "dema_jev_weight", "dema_jina_rerank", "dema_jina_no_coma",
+            "dema_shared", "dema_single",
+        }:
             scalability_fills.append(fill_magneto)
-        if scalability_methods & {"dema_own_retrieval", "dema"}:
+        if scalability_methods & {"dema_own_retrieval", "dema_legacy"}:
             scalability_fills.append(fill_own)
         if scalability_fills:
             seed = int(scfg.get("seed", 42))

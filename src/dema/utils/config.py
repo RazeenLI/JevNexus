@@ -160,6 +160,16 @@ def validate_config(config: Config) -> None:
         raise ConfigError("fusion weights must be non-negative")
     if abs(fusion_total - 1.0) > 1e-9:
         raise ConfigError("fusion weights must sum to 1")
+    dynamic = config.models.get("dynamic_weight", {})
+    dynamic_min = float(dynamic.get("min_jev_weight", 0.1))
+    dynamic_max = float(dynamic.get("max_jev_weight", 0.7))
+    if not 0 <= dynamic_min <= dynamic_max <= 1:
+        raise ConfigError("dynamic_weight bounds must satisfy 0 <= min <= max <= 1")
+    if int(dynamic.get("evidence_top_n", 5)) <= 0:
+        raise ConfigError("dynamic_weight.evidence_top_n must be positive")
+    jina = config.models.get("jina_rerank", {})
+    if jina and int(jina.get("top_n", 3)) <= 1:
+        raise ConfigError("jina_rerank.top_n must be greater than one")
     decision_serving = config.models.get("serving", {}).get("decision", {})
     if int(decision_serving.get("batch_size", 0)) <= 0:
         raise ConfigError("serving.decision.batch_size must be positive")

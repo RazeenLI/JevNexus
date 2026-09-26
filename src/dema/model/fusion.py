@@ -1,4 +1,4 @@
-"""DeMa-Fusion: fixed, training-free fusion of Jev and COMA++ scores."""
+"""Fixed, training-free fusion of Jev and COMA++ scores for DeMa−R."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ class FixedScoreFusionReranker:
 
     COMA++ returns a sparse score matrix after its bidirectional selection.
     Pairs absent from that matrix receive score zero, exactly as in the offline
-    experiment that established the DeMa-Fusion baseline.
+    experiment that established the fixed-fusion ablation.
     """
 
     def __init__(

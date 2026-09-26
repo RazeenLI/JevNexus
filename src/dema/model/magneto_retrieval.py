@@ -2,7 +2,7 @@
 
 The baseline keeps running the vendored Magneto pipeline unchanged.  This
 adapter exists for controlled reranker comparisons: ``dema_shared`` and
-``dema_single`` receive the same cleaned data, MPNet serialization, sampling,
+DeMa and its controlled ablations receive the same cleaned data, MPNet serialization, sampling,
 exact-name matches, threshold and per-dataset encoding used by Magneto before
 its Qwen reranker.
 """

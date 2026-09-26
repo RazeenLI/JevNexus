@@ -25,3 +25,5 @@ saves/*/*
 !saves/*/.gitkeep
 metrics/*
 !metrics/.gitkeep
+
+Writing/

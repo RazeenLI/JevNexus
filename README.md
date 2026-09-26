@@ -65,7 +65,7 @@ bash scripts/run_all.sh
 
 ```bash
 source scripts/_env.sh
-$PYTHON -m dema run --methods dema_fusion --datasets GDC --limit 1 --overwrite
+$PYTHON -m dema run --methods dema --datasets GDC --limit 1 --overwrite
 $PYTHON -m dema run --methods coma --datasets OpenData
 ```
 
@@ -93,47 +93,73 @@ tail -f logs/lanes/*/lane.log
 | 方法 | Candidate retriever | Scoring / reranking | 用途 |
 |---|---|---|---|
 | `magneto_qwen` | 原版 Magneto | Qwen listwise Top-20 | baseline |
-| `dema_fusion` | Magneto 候选 | `0.4 × Jev-Single + 0.6 × COMA++` | **DeMa 基础版本** |
-| `dema_single` | Magneto 候选 | Jev 只查看当前候选 | 去除 COMA++ 的消融 |
-| `dema_shared` | Magneto 候选 | Jev 查看全部 Top-20 | context 消融 |
-| `dema_own_retrieval` | DeMa 原始检索 | Jev 查看全部 Top-20 | retrieval 消融 |
+| `dema`（DeMa） | Magneto 候选 | Jev + COMA++ 固定融合 + Jina listwise Top-3 | **主方法** |
+| `dema_no_rerank`（DeMa−R） | Magneto 候选 | Jev + COMA++ 固定融合 | 去除 listwise reranker |
+| `dema_no_struct`（DeMa−S） | Magneto 候选 | Jev + Jina listwise Top-3 | 去除 structured matcher |
+| `dema_decision`（DeMa−R−S） | Magneto 候选 | Jev 只查看当前候选 | decision-only 消融 |
+| `dema_shared`（DeMa-Shared） | Magneto 候选 | Jev 查看全部 Top-20 | context 消融 |
 
-`dema_fusion`、`dema_shared` 和 `dema_single` 复用 Magneto 的数据清洗、MPNet 序列化、mixed
-sampling、exact-name match、阈值、Top-20、候选顺序及 dataset-specific 编码；Jev
-看到的列名和 sampled values 也与 Magneto Qwen prompt 一致且不额外加入 dtype。
-`dema_fusion` 对同一输入另行计算 COMA++ 的 schema/instance 分数，只在 Magneto
-Top-20 内用固定原始分数公式重排；COMA++ 双向筛选未选中的 pair 记为 0。该方法不含
-训练参数或额外 LLM ranker。`dema_own_retrieval` 保留 DeMa 原始 profile（类型和频率
-采样）用于隔离 retrieval 的影响。旧方法名 `dema` 仅为已有 single + own-retrieval
-结果保留，不再列入默认实验。
+这五种方法复用 Magneto 的数据清洗、MPNet 序列化、mixed sampling、exact-name match、
+阈值、Top-20、候选顺序及 dataset-specific 编码。Jev 看到的列名和 sampled values 也与
+Magneto Qwen prompt 一致且不额外加入 dtype。DeMa 中 COMA++ 与 Jev 并行打分，先按
+`0.4 × Jev + 0.6 × COMA++` 融合，再由 0.6B 的 Jina reranker 对 Top-3 做 listwise
+重排。表中的 R 表示 Jina reranker，S 表示 COMA++ structured matcher。
+
+旧命令名仍作为兼容别名保留：`dema_jina_rerank` 对应 `dema`，`dema_fusion` 对应
+`dema_no_rerank`，`dema_jina_no_coma` 对应 `dema_no_struct`，`dema_single` 对应
+`dema_decision`。早期使用 DeMa 自有 retriever 的实现改名为 `dema_legacy`；
+`dema_own_retrieval` 仍保留为 retrieval/context 研究变体。兼容名会写入各自的旧结果目录，
+不会与新方法名共用输出。
 
 ## 当前基础结果
 
 下面是 `experiment_dev.yaml` 当前选取的 29 个有效 case 的 case-macro 结果。
-`dema_fusion` 由已经保存的 `dema_single` 与 COMA++ 候选级分数离线复算确认；正式运行
-使用完全相同的固定公式。它不是逐 case 选择较优方法的 oracle。
+下表来自这些实现改名前已经完整运行的对应方法；新名称与旧结果目录的映射见上一节。
 
 | 方法 | MRR | Recall@GT | Hits@1 | Hits@5 | Recall@5 | Recall@10 | Recall@20 | NDCG@10 | MAP | 平均时间/case |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | Magneto-Qwen | 0.9501 | 0.8259 | 0.9386 | 0.9658 | 0.9440 | 0.9594 | 0.9683 | 0.9500 | 0.9431 | 133.72s |
-| **DeMa-Fusion** | **0.9343** | **0.8050** | **0.9097** | **0.9726** | **0.9583** | **0.9643** | **0.9683** | **0.9401** | **0.9287** | 约 17.1s¹ |
+| **DeMa** | **0.9611** | **0.8020** | **0.9496** | **0.9726** | **0.9583** | **0.9643** | **0.9683** | **0.9593** | **0.9540** | **17.62s** |
+| DeMa−R | 0.9343 | 0.8050 | 0.9097 | 0.9726 | 0.9583 | 0.9643 | 0.9683 | 0.9401 | 0.9287 | 16.89s |
+| DeMa−S | 0.9375 | 0.6990 | 0.9209 | 0.9580 | 0.9409 | 0.9643 | 0.9683 | 0.9409 | 0.9298 | 16.85s |
 | COMA++ | 0.9162 | 0.7382 | 0.9078 | 0.9271 | 0.8938 | 0.8948 | 0.9000 | 0.9089 | 0.9037 | 0.50s |
-| DeMa-Single | 0.8845 | 0.6778 | 0.8301 | 0.9580 | 0.9409 | 0.9643 | 0.9683 | 0.9023 | 0.8781 | 16.59s |
-
-¹ 尚未对正式 `dema_fusion` runner 单独计时；17.1s 是 DeMa-Single 与 COMA++
-现有平均时间顺序相加的估计值。
+| DeMa−R−S | 0.8845 | 0.6778 | 0.8301 | 0.9580 | 0.9409 | 0.9643 | 0.9683 | 0.9023 | 0.8781 | 16.59s |
 
 各数据集的 MRR：
 
 | 方法 | ChEMBL | GDC | Magellan | OpenData | TPC-DI | WikiData |
 |---|---:|---:|---:|---:|---:|---:|
 | Magneto-Qwen | 1.0000 | 0.7768 | 1.0000 | 0.9887 | 0.9933 | 0.9396 |
-| **DeMa-Fusion** | **0.8604** | **0.8133** | **1.0000** | **0.9887** | **1.0000** | **0.9458** |
+| **DeMa** | **1.0000** | **0.8477** | **1.0000** | **0.9944** | **0.9933** | **0.9240** |
+| DeMa−R | 0.8604 | 0.8133 | 1.0000 | 0.9887 | 1.0000 | 0.9458 |
+| DeMa−S | 0.9373 | 0.8230 | 0.9857 | 0.9804 | 1.0000 | 0.8885 |
 | COMA++ | 0.9758 | 0.5972 | 1.0000 | 0.9840 | 1.0000 | 0.9458 |
-| DeMa-Single | 0.7894 | 0.7578 | 0.9217 | 0.9737 | 0.9933 | 0.8677 |
+| DeMa−R−S | 0.7894 | 0.7578 | 0.9217 | 0.9737 | 0.9933 | 0.8677 |
 
-后续改进分为两条独立路线：基于置信度的动态融合权重（重点解决 ChEMBL），以及只对
-低置信度 Top-3/Top-5 候选调用的小型 LLM ranker。
+### 可选实验方法
+
+下面的方法已注册但不在默认实验矩阵中：
+
+| 方法 | 结构 | 默认设置 |
+|---|---|---|
+| `dema_jev_weight` | Jev 对每个 source 再判断一次两类证据的相对可靠性 | 将 `P(更相信Jev)` 映射到 Jev 权重 `[0.1, 0.7]`；`P=0.5` 时回到 `0.4/0.6` |
+| `dema_legacy` | DeMa 早期自有 retriever + Jev-Single | 仅用于复现旧结果 |
+| `dema_own_retrieval` | DeMa 自有 retriever + Jev-Shared | retrieval/context 研究变体 |
+
+Jina 实验默认使用 0.6B 的 `jina-reranker-v3.5`，通过其原生
+`model.rerank(query, documents)` 接口在实验 worker 内加载，不需要额外服务端口。
+模型 revision 固定为 `e8a93f33f0b22108f8c2364f8484ce3422552fbc`，避免上游更新改变结果。
+`jina_rerank.include_scores: false` 可以运行不提供分数的内容-only 消融。该模型使用
+CC BY-NC 4.0 许可证，适用于本研究实验，但商业使用需要另行确认许可。
+
+单独运行开发集实验：
+
+```bash
+source scripts/_env.sh
+$PYTHON -m dema run --config configs/experiment_dev.yaml \
+  --methods dema dema_no_rerank dema_no_struct dema_decision dema_shared \
+  --gpus 1 --server-timeout 900
+```
 
 详细实现审计见：
 

@@ -18,19 +18,35 @@ retriever:
   device: auto           # auto | cpu | cuda | cuda:N
   normalize: true
 
-# DeMa candidate presentation. Magneto keeps its upstream representation.
+# Default presentation for the legacy DeMa retriever. Canonical DeMa methods
+# override this to retrieval order so they preserve Magneto's candidate signal.
 reranking:
   # Candidates are presented (and given ids c0..c{k-1}) in target-schema column
   # order, never in retrieval order, so neither reranker can infer retrieval rank.
   candidate_order: target_schema
   candidate_id_prefix: c
 
-# Training-free DeMa-Fusion baseline. These raw-score weights reproduce the
-# 29-case development result reported in README.md; COMA++-unselected pairs
-# receive score zero.
+# Fixed fusion used by DeMa and DeMa−R. COMA++-unselected pairs receive zero.
 fusion:
   jev_weight: 0.4
   coma_plus_weight: 0.6
+
+# Optional dynamic-weight experiment; not included in experiment*.yaml.
+dynamic_weight:
+  # Jev's second-pass P(semantic evidence is more reliable) is mapped into
+  # this bounded interval. P=0.5 reproduces the 0.4 Jev baseline weight.
+  min_jev_weight: 0.1
+  max_jev_weight: 0.7
+  evidence_top_n: 5
+
+# Listwise stage used by DeMa and DeMa−S.
+jina_rerank:
+  model: jinaai/jina-reranker-v3.5
+  revision: e8a93f33f0b22108f8c2364f8484ce3422552fbc
+  dtype: auto
+  device_map: auto
+  top_n: 3
+  include_scores: true
 
 qwen:
   prompt:
@@ -57,8 +73,8 @@ decision:
   timeout: 300
   max_retries: 3
   # Default for the backward-compatible ``dema`` alias.  Registered experiment
-  # variants override this explicitly: dema_shared=shared, dema_single=single,
-  # dema_own_retrieval=shared.
+  # Variants override this explicitly: dema/dema_no_*=single,
+  # dema_shared=shared, and legacy own-retrieval diagnostics retain their setup.
   # How candidate information is laid out in the System One request:
   #   shared: state = source column + all candidates; one noul question per candidate id
   #   single: state = source column; each question carries its own candidate description

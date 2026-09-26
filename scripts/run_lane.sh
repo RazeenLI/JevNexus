@@ -154,18 +154,20 @@ case "$LANE" in
         fi
         ;;
     decision)
-        if start_server scripts/serve_decision.sh dema_shared; then
-            run_task dema_fusion runner dema_fusion
+        if start_server scripts/serve_decision.sh dema; then
+            run_task dema runner dema
+            run_task dema_no_rerank runner dema_no_rerank
+            run_task dema_no_struct runner dema_no_struct
+            run_task dema_decision runner dema_decision
             run_task dema_shared runner dema_shared
-            run_task dema_single runner dema_single
-            run_task dema_own_retrieval runner dema_own_retrieval
             run_task scalability_dema_shared scal dema_shared
             stop_server
         else
+            skip_task dema "decision server did not start"
+            skip_task dema_no_rerank "decision server did not start"
+            skip_task dema_no_struct "decision server did not start"
+            skip_task dema_decision "decision server did not start"
             skip_task dema_shared "decision server did not start"
-            skip_task dema_fusion "decision server did not start"
-            skip_task dema_single "decision server did not start"
-            skip_task dema_own_retrieval "decision server did not start"
             skip_task scalability_dema_shared "decision server did not start"
         fi
         run_task baseline_isresmat runner isresmat
