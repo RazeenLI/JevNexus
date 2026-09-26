@@ -69,8 +69,24 @@ class Config:
         return self.path("manifest")
 
     @property
-    def outputs_dir(self) -> Path:
-        return self.path("outputs")
+    def models_dir(self) -> Path:
+        return self.path("models")
+
+    @property
+    def saves_dir(self) -> Path:
+        return self.path("saves")
+
+    @property
+    def logs_dir(self) -> Path:
+        return self.path("logs")
+
+    @property
+    def metrics_dir(self) -> Path:
+        return self.path("metrics")
+
+    @property
+    def cache_dir(self) -> Path:
+        return self.path("cache")
 
     def section(self, name: str) -> dict[str, Any]:
         """Deep copy of a top-level section of models.yaml."""
@@ -117,11 +133,11 @@ def load_config(
     return config
 
 
-REQUIRED_MODEL_SECTIONS = ("representation", "retriever", "qwen", "decision", "baselines")
+REQUIRED_MODEL_SECTIONS = ("representation", "retriever", "qwen", "decision", "fusion", "baselines")
 
 
 def validate_config(config: Config) -> None:
-    for key in ("raw_data", "processed_data", "manifest", "outputs"):
+    for key in ("raw_data", "processed_data", "manifest", "models", "saves", "logs", "metrics", "cache"):
         if key not in config.paths:
             raise ConfigError(f"paths.yaml is missing '{key}'")
     for section in REQUIRED_MODEL_SECTIONS:
@@ -136,6 +152,17 @@ def validate_config(config: Config) -> None:
         raise ConfigError("retriever.top_k must be positive")
     if float(config.models["qwen"].get("temperature", 0)) != 0.0:
         raise ConfigError("qwen.temperature must be 0")
+    if config.models["decision"].get("candidate_context") not in ("shared", "single"):
+        raise ConfigError("decision.candidate_context must be 'shared' or 'single'")
+    fusion = config.models["fusion"]
+    fusion_total = float(fusion.get("jev_weight", -1)) + float(fusion.get("coma_plus_weight", -1))
+    if float(fusion.get("jev_weight", -1)) < 0 or float(fusion.get("coma_plus_weight", -1)) < 0:
+        raise ConfigError("fusion weights must be non-negative")
+    if abs(fusion_total - 1.0) > 1e-9:
+        raise ConfigError("fusion weights must sum to 1")
+    decision_serving = config.models.get("serving", {}).get("decision", {})
+    if int(decision_serving.get("batch_size", 0)) <= 0:
+        raise ConfigError("serving.decision.batch_size must be positive")
     for key in ("datasets", "methods"):
         if not isinstance(config.experiment.get(key), list) or not config.experiment[key]:
             raise ConfigError(f"experiment config must list '{key}'")

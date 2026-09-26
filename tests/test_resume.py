@@ -5,8 +5,8 @@ import json
 import pandas as pd
 
 from dema.data.types import Match
-from dema.models.base import BaseMatcher
-from dema.runner import OutputPaths, run, unit_state
+from dema.model.base import BaseMatcher
+from dema.experiments.runner import ExperimentPaths, run, unit_state
 
 
 class CountingMatcher(BaseMatcher):
@@ -30,7 +30,7 @@ class CountingMatcher(BaseMatcher):
 
 def test_resume_reruns_only_incomplete(mini_benchmark):
     config, records = mini_benchmark
-    paths = OutputPaths(config.outputs_dir)
+    paths = ExperimentPaths.from_config(config)
     gdc = next(r for r in records if r.dataset == "GDC")
     od = next(r for r in records if r.dataset == "OpenData")
 
@@ -66,3 +66,9 @@ def test_resume_reruns_only_incomplete(mini_benchmark):
     m5 = CountingMatcher()
     run(config, "levenshtein", ["GDC", "OpenData"], resume=False, matcher=m5, argv=["t"])
     assert sorted(m5.calls) == sorted([gdc.case_id, od.case_id])
+
+    # A semantic config change invalidates old success markers.
+    config.experiment["seed"] += 1
+    m6 = CountingMatcher()
+    run(config, "levenshtein", ["GDC"], matcher=m6, argv=["t"])
+    assert m6.calls == [gdc.case_id]

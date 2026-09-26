@@ -1,7 +1,7 @@
 import pytest
 
 from dema.data.types import Candidate
-from dema.models.ranking import RankingError, build_final_ranking, ranking_from_scores, validate_ranking
+from dema.model.ranking import RankingError, build_final_ranking, ranking_from_scores, validate_ranking
 
 
 def full(order_scores):

@@ -76,7 +76,10 @@ def mini_benchmark(config, tmp_path):
 def config(tmp_path):
     cfg = load_config()
     cfg = copy.deepcopy(cfg)
-    cfg.paths["outputs"] = str(tmp_path / "outputs")
+    cfg.paths["saves"] = str(tmp_path / "saves")
+    cfg.paths["logs"] = str(tmp_path / "logs")
+    cfg.paths["metrics"] = str(tmp_path / "metrics")
+    cfg.paths["cache"] = str(tmp_path / "cache")
     return cfg
 
 
@@ -121,15 +124,16 @@ class FakeServer:
 
             def _qwen(self, req):
                 user = req["messages"][1]["content"]
-                src = re.search(r"Source column:\nname: (.*)", user).group(1)
-                cands = re.findall(r"\[(c\d+)\]\nname: (.*)", user)
-                scores = {cid: round(_name_sim(src, name), 4) for cid, name in cands}
+                source_match = re.search(r"Candidate Column: Column: ([^,\n]+)", user)
+                src = source_match.group(1) if source_match else "a"
+                names = re.findall(r"^Column: ([^,\n]+)", user, re.MULTILINE)
+                results = [{"column": name, "score": round(_name_sim(src, name), 4)} for name in names]
                 if server.mode == "invalid_json":
                     content = "not json"
                 elif server.mode == "missing":
-                    content = json.dumps(dict(list(scores.items())[:-1]))
+                    content = json.dumps(results[:-1])
                 else:
-                    content = "```json\n" + json.dumps(scores) + "\n```"
+                    content = json.dumps(results or [{"column": "b", "score": 1.0}])
                 self._send(200, {"choices": [{"message": {"content": content}}],
                                  "usage": {"prompt_tokens": 10, "completion_tokens": 5}})
 
@@ -137,6 +141,11 @@ class FakeServer:
                 state = req["state"]
                 src = re.search(r"Source column:\nname: (.*)", state).group(1)
                 names = dict(re.findall(r"\[(c\d+)\]\nname: (.*)", state))
+                if not names:
+                    names = {
+                        qid: re.search(r"name: ([^\n]+)", question["instructions"]).group(1)
+                        for qid, question in req["questions"].items()
+                    }
                 answers = {q: {"type": "noul", "noul": round(_name_sim(src, names[q]), 4)} for q in req["questions"]}
                 if server.mode == "out_of_range":
                     first = next(iter(answers))

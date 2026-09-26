@@ -1,233 +1,185 @@
 # DeMa — Decision-based Schema Matching
 
-Self-contained research codebase for zero-shot schema matching on the benchmark
-collection used by Magneto (GDC + Valentine: ChEMBL, Magellan, OpenData, TPC-DI,
-WikiData). It contains
+这是一个零样本 schema matching 实验库。代码、数据、模型、运行状态、日志和最终指标已经按用途分开；仓库不再使用含义模糊的 `outputs/`。
 
-* the traditional baselines compared in Magneto (COMA, COMA++, Distribution-based,
-  Similarity Flooding, ISResMat, Unicorn) plus two trivial ones (Jaccard, Levenshtein);
-* `magneto_qwen` — a Magneto-style retrieve-then-rerank baseline with **Qwen3.5-9B**;
-* `dema` — the same retrieval with a **decision model** (default: Open-Jev-9B, a
-  Jev-like System One model) giving one independent `P(match)` per candidate;
-* one evaluator, runtime tracking, resumable runner, scalability runner and scripts.
+## 目录规则
 
-Nothing is imported from Magneto or other research repositories at run time.
-Model servers (vLLM / the built-in HF server for Qwen, the Open-Jev server for the
-decision model) are external processes that DeMa talks to over HTTP only.
-
-```
-Benchmark -> Column profiles -> Semantic candidate search (top-k)
-                                   /                        \
-                        Qwen3.5-9B scoring          Decision-model scoring
-                          (magneto_qwen)                   (dema)
-                                   \                        /
-                                     Complete ranking -> Shared evaluator
-```
-
-## Environment
-
-All commands use the existing conda env **`airdb`**
-(`~/miniconda3/envs/airdb/bin/python`, override with `PYTHON=...`). Packages
-added to it for DeMa: `openpyxl` (GDC source extraction), `peft` and `open-jev`
-(installed with `--no-deps`; only needed by `scripts/serve_decision.sh`).
-Scripts set `PYTHONPATH=src`; tests run with `python -m pytest`.
-
-## Quick start
-
-```bash
-bash scripts/download_data.sh      # raw benchmark -> data/raw (idempotent)
-bash scripts/prepare_data.sh       # -> data/processed + data/manifests/all.jsonl + integrity checks
-bash scripts/serve_qwen.sh         # terminal 1: Qwen3.5-9B, OpenAI API on :8000
-bash scripts/serve_decision.sh     # terminal 2: decision model, System One API on :8009
-bash scripts/run_all.sh            # preflight, smoke test, all methods, scalability, evaluation
-```
-
-Single runs:
-
-```bash
-python -m dema.runner --method dema --dataset GDC
-python -m dema.runner --method coma --dataset OpenData --case-id <id> --overwrite
-python -m dema.runner --method unicorn --dataset all --limit 1 --save-debug
-python -m dema.evaluation.evaluator               # == scripts/evaluate.sh
-```
-
-Runner flags: `--case-id`, `--resume` / `--overwrite` (default from
-`experiment.yaml`), `--config <experiment.yaml>`, `--save-debug`, `--limit N`
-(cases per dataset), `--no-cache`, `--fail-on-error`.
-
-## Repository layout
-
-```
-configs/       paths.yaml models.yaml experiment.yaml scalability.yaml  (all constants)
-data/raw/      downloaded archives + extracted benchmark (never modified)
-data/processed/<dataset>/<case_id>/{source,target,ground_truth}.csv, metadata.json
-data/manifests/all.jsonl
+```text
+configs/                 实验、模型、路径和扩展性配置
+data/
+  raw/                   下载/解压后的原始 benchmark
+  processed/             统一格式后的实验输入
+  manifests/             case 清单与文件校验信息
+models/checkpoints/      本地模型权重（不提交 Git）
 src/dema/
-  data/            download, prepare (+ integrity checks), loader, manifest, types
-  representation/  profiler (type inference), sampler (frequency sampling), serializer
-  models/          base, retriever (+cache), prompting, generative_reranker (Qwen),
-                   decision_reranker (DeMa), two_stage, magneto_qwen, dema, ranking, registry
-  baselines/       coma, coma_plus, distribution, similarity_flooding, isresmat, unicorn, simple
-  evaluation/      metrics, runtime, evaluator, aggregate
-  serving/         openai_server (HF fallback for serve_qwen.sh)
-  runner.py  scalability.py  preflight.py  smoke.py
-scripts/       download/prepare/serve/smoke/run_*/evaluate/run_all
-tests/         unit + integration tests (fake model servers, no GPU needed)
-outputs/       cache, predictions, runtime, status, logs, metrics, manifests, scalability, smoke
+  data/                  下载、整理、加载数据
+  baselines/             COMA、COMA++、Magneto、ISResMat、Unicorn 等
+  model/                 DeMa 模型、检索、排序与列表示
+  metrics/               指标定义、聚合和 evaluator
+  experiments/           runner、preflight、smoke、scalability、precompute
+  serving/               Qwen 的 Transformers fallback server
+  utils/                 配置、I/O、日志等通用代码
+vendor/magneto/          固定版本的 Magneto 上游源码及最小本地补丁
+cache/candidates/        可删除、可重建的 DeMa 原始候选检索缓存
+cache/candidates_magneto/ DeMa 对照变体共用的 Magneto 候选缓存
+saves/                   可恢复实验所需的结构化状态和预测
+logs/                    case、lane、server 的人类可读日志
+metrics/                 最终 CSV 指标表
+scripts/                 统一的运行入口
+tests/                   无 GPU 的快速测试和可选慢测试
 ```
 
-## Benchmark
+各运行目录的生命周期不同：
 
-| Dataset | Cases | Source | Notes |
-|---|---:|---|---|
-| GDC | 10 | GDC-SM, Zenodo 10.5281/zenodo.14963588 | target: 736-column GDC schema |
-| ChEMBL | 180 | Valentine, Zenodo 10.5281/zenodo.5084605 | 4 relatedness types |
-| Magellan | 7 | Valentine | |
-| OpenData | 180 | Valentine | |
-| TPC-DI | 180 | Valentine | |
-| WikiData | 4 | Valentine (`Wikidata/Musicians`) | |
+- `cache/` 可以随时删除并重算。
+- `logs/` 只用于排错，不决定一个 case 是否完成。
+- `saves/` 包含恢复实验所需的 prediction、runtime、status 和 run manifest。
+- `metrics/` 由 evaluator 从 `saves/` 重建。
 
-GDC-SM does not redistribute the study tables; `dema.data.download` rebuilds
-them with the official GDC-SM procedure (`gdc_download.py` from the Zenodo
-record, re-implemented with identical logic and its four documented fixes).
+## 快速开始
 
-Processing copies tables byte-for-byte when they are valid UTF-8 (otherwise the
-decoded text is re-written as UTF-8), converts ground truth to
-`source_column,target_column`, and never renames columns, alters values, or adds/
-drops rows or GT pairs. `prepare_data.sh` verifies this for every case (content,
-header, row count, GT pairs, raw file hashes, pandas-loadable headers).
-
-**Known raw defect.** In `wikidata_musicians_unionable` and
-`wikidata_musicians_viewunion` the GT pair `givenName -> forename` refers to a
-source column that is called `givenNameLabel`. The GT is kept unchanged; the
-pair is listed in `paths.yaml: known_gt_defects` and counts as a miss for every
-method (as in Magneto's evaluation). Any other invalid reference fails the
-integrity check.
-
-## Methods
-
-### Shared representation and retrieval (`magneto_qwen`, `dema`)
-
-* **Profile** per column: name, type (`integer|float|boolean|datetime|string|mixed`,
-  deterministic rules), top-10 values by frequency (ties lexicographic; nulls removed).
-* **Serialization** for embedding: `Column: <name>\nType: <type>\nValues: v1 | v2 | ...`.
-* **Retrieval**: `sentence-transformers/all-mpnet-base-v2` (zero-shot, no fine-tuning),
-  cosine similarity, complete target ordering per source column (ties by target
-  position); top-k = 20 go to the reranker.
-* **Cache** `outputs/cache/candidates/`: key = dataset, case_id, embedding model,
-  representation signature, top_k, and source/target profile fingerprints. Both
-  matchers reuse the same entries, so their candidate sets and retrieval scores are
-  identical.
-* **Candidate presentation**: candidates get ids `c0..c{k-1}` in *target-schema
-  order* (not retrieval order); rerankers see only name/type/values — never retrieval
-  scores or ranks, ground truth, or dataset hints.
-* **Final ranking**: top-k sorted by reranker score (ties by retrieval rank), then
-  the remaining targets in retrieval order. Every target appears exactly once.
-  Stored `score` = reranker score for the top-k, `0.0` for the tail;
-  `reranker_score` and `retrieval_score` are stored separately.
-
-### magneto_qwen
-
-One chat request per source column with all k candidates; Qwen must return
-`{"c0": 0.91, ...}` with exactly the k ids and scores in [0,1]; temperature 0,
-non-thinking chat template (as in CoRE). Invalid output (bad JSON, missing/extra/
-duplicate ids, non-numeric, NaN, out of range), timeouts and connection errors are
-retried up to `qwen.max_retries`; after that the case fails. There is **no fallback
-to retrieval scores**. Differences to original Magneto: zero-shot retriever, DeMa
-serialization, Qwen3.5-9B instead of GPT-4o-mini.
-
-### dema
-
-Same pipeline; the reranker is `DecisionReranker` over a pluggable
-`DecisionBackend` (`predict(state, questions) -> dict`). The default `system_one`
-backend speaks the Jev/Open-Jev System One protocol (`POST /v1/systemone`): the
-state holds the source column and the k candidates, and there is one independent
-`noul` (yes/no) question per candidate id — "Does candidate cX represent the same
-underlying schema attribute as the source column?" — giving `p_i = P(T_i matches S)`.
-Responses must contain exactly the k ids with probabilities in [0,1]; same retry/
-failure policy as Qwen. The checkpoint (default `ZefanCai/Open-Jev-9B`, LoRA +
-decision head on the pinned Qwen3.5-9B revision) is configured only in
-`models.yaml`/`serve_decision.sh`.
-
-### Traditional baselines — implementation notes and simplifications
-
-| Method | Implementation |
-|---|---|
-| `coma` | valentine 1.x pure-Python COMA, schema matchers only. Magneto used Java COMA 3.0 via older valentine; `delta=1.0`, `threshold=0` keep all pairs so a complete ranking exists. |
-| `coma_plus` | same with the instance (TF-IDF) matcher = Magneto's `ComaInst`. Reference randomly sampled 500 rows; here the first 500 non-empty rows (deterministic). |
-| `distribution` | valentine `DistributionBased` (default thresholds). Pairs it does not output are ranked after scored pairs in target order. |
-| `similarity_flooding` | valentine `SimilarityFlooding` (inverse-average, formula C, prefix/suffix). |
-| `isresmat` | independent re-implementation of the reference train-to-match inference (BERT + projector, pairwise-fragment contrastive loss, student-t column agents, Sinkhorn rectification loss, 200 column-samples/column, ranking by agent similarity). Not implemented: schema-name transformation variants (reference default uses original names), validation/early stopping; fragments > 512 tokens are truncated rather than resampled; full ranking instead of top-10. |
-| `unicorn` | inference-only re-implementation (DeBERTa-base [CLS] -> 6-expert MoE -> classifier) loading the released `UnicornPlus` checkpoint (`RUC-DataLab/unicorn-plus-v1`, strict state-dict load); reference serialization `[ATT] name [VAL] v ...` (first 20 unique values), 128 tokens, score = match logit. |
-
-All baselines implement `BaseMatcher.match(source_df, target_df) -> list[Match]`,
-read the same processed data, never see ground truth and never compute metrics.
-
-## Outputs
-
-```
-outputs/predictions/<method>/<dataset>/<case_id>.json   complete rankings
-outputs/runtime/<method>/<dataset>/<case_id>.json       runtime record
-outputs/status/<method>/<dataset>/<case_id>.json        success/failed marker (+ prediction hash)
-outputs/logs/<method>/<dataset>/<case_id>.log           per-case log (no prompts, no keys)
-outputs/debug/<run_id>/...                              --save-debug requests/responses
-outputs/manifests/<run_id>.json                         git commit, config, models, seed, ...
-outputs/metrics/{per_case,per_dataset,overall,completeness}.csv
-outputs/scalability/{raw,predictions}/..., summary.csv
-```
-
-Predictions keep the full ranking for every source column, so new ranking
-metrics can be computed without re-running models.
-
-**Resume.** A `method x dataset x case` unit is complete iff its status is
-`success`, the prediction hash matches and the file holds a full ranking.
-`--resume` skips complete units and re-runs missing, partial and failed ones.
-Failures are recorded (status `failed`, traceback in the log) and reported by the
-evaluator in `completeness.csv`; `experiment.on_failure` chooses continue/abort.
-
-## Runtime
-
-Per case: `representation_seconds`, `retrieval_seconds`, `reranking_seconds`,
-`matching_seconds` (baseline algorithm, incl. ISResMat in-situ training),
-`ranking_seconds`, `total_seconds` (sum of components), `model_requests`,
-`input_tokens`, `output_tokens`, `retries`, `failures` (failed attempts, incl.
-retried ones), `peak_gpu_memory_mb` (this process only), `wall_seconds`.
-Model loading happens once per process in `matcher.load()` and is excluded. On a
-candidate-cache hit `retrieval_seconds` is the compute time recorded when the
-entry was created (`retrieval_cache_hit=true`).
-
-## Evaluation
-
-One evaluator for all methods (`dema.evaluation`). Cases with empty ground truth
-are skipped (none exist in the current benchmark). A *query* is a source column
-with at least one GT target.
-
-* **MRR** — mean over queries of 1 / (best rank of any correct target); 0 if none.
-* **Recall@GT** — Valentine `RecallAtSizeofGroundTruth` (Magneto's metric): pool all
-  pairs of the case, sort by score (ties: per-source rank, then source order), keep
-  top |GT|, recall against GT.
-* **Hits@K** (K = 1, 5, 10) — fraction of queries with a correct target in the top K.
-* **Recall@K** (K = 1, 5, 10, 20) — pair level: fraction of GT pairs whose target is in
-  the source column's top K. Recall@20 is the retrieval ceiling for the rerankers.
-* **NDCG@5/10** (binary relevance) and **MAP** (optional diagnostics).
-
-Aggregation (`weighting` column): `per_dataset.csv` = unweighted mean over cases of
-the dataset; `overall.csv` has `case_macro` (mean over all cases) and
-`dataset_macro` (mean of dataset means). No micro-averaging. `complete=False`
-marks methods with unevaluated cases.
-
-## Scalability
-
-`python -m dema.scalability` (configs/scalability.yaml) subsamples target columns
-deterministically (seeded per case/size/repeat), always keeps the GT target
-columns and the original column order, and stores every repetition separately.
-Units whose target has fewer columns than the requested size are recorded as
-`insufficient_columns` — with the current benchmark GDC supports sizes up to 736
-and OpenData only 50 (max width 51); no synthetic columns are added.
-
-## Tests
+仓库实验代码默认使用 `~/miniconda3/envs/airdb/bin/python`；vLLM 单独安装在
+`~/.venvs/vllm`，避免它固定的 Torch 版本污染实验环境。可用下面的脚本在新机器上创建：
 
 ```bash
-python -m pytest                      # fast suite, fake model servers
-DEMA_SLOW_TESTS=1 python -m pytest    # + ISResMat/Unicorn (downloads models)
+bash scripts/setup_vllm.sh
+```
+
+正常实验只需要一个 Python 命令。数据不存在时会自动整理；`magneto_qwen` 和
+DeMa 变体所需的服务会按需启动、通过真实请求后再运行，并在该方法结束后自动关闭：
+
+```bash
+source scripts/_env.sh
+$PYTHON -m dema run --config configs/experiment_dev.yaml
+$PYTHON -m dema run --config configs/experiment.yaml
+```
+
+旧命令仍是兼容入口，行为与上面的 Python 命令相同：
+
+```bash
+EXPERIMENT_CONFIG=configs/experiment_dev.yaml bash scripts/run_all.sh
+bash scripts/run_all.sh
+```
+
+单独跑一个模型或一个小样本也使用同一入口：
+
+```bash
+source scripts/_env.sh
+$PYTHON -m dema run --methods dema_fusion --datasets GDC --limit 1 --overwrite
+$PYTHON -m dema run --methods coma --datasets OpenData
+```
+
+默认使用 GPU 0，服务首次启动可通过 `--server-timeout 3600` 留出模型下载时间。
+`--gpus 1` 会让模型服务和实验 worker 共用 GPU 1；`--gpus 1 0` 会把模型服务放在
+GPU 1、将 Magneto MPNet/DeMa 检索模型等进程内模型放在 GPU 0。旧参数
+`--qwen-gpu`、`--decision-gpu` 仍然兼容，且会让对应方法的 worker 使用同一张卡。
+`--verify-data` 才会重新执行较慢的全量原始数据完整性检查。高级调试入口仍保留在
+`dema.experiments.*`。
+
+双 GPU lane：
+
+```bash
+nohup bash scripts/run_lane.sh qwen 0 >/dev/null 2>&1 &
+nohup bash scripts/run_lane.sh decision 1 >/dev/null 2>&1 &
+tail -f logs/lanes/*/lane.log
+```
+
+## 方法边界
+
+`magneto_qwen` 使用 `vendor/magneto` 中固定提交的上游 Magneto 全流程，包括其列编码、MPNet 候选检索和 LLM reranker。唯一功能补丁是把 `litellm` 调用替换成本地 OpenAI-compatible Qwen endpoint。它不与 DeMa 共享候选缓存。
+
+主实验与消融使用以下固定矩阵：
+
+| 方法 | Candidate retriever | Scoring / reranking | 用途 |
+|---|---|---|---|
+| `magneto_qwen` | 原版 Magneto | Qwen listwise Top-20 | baseline |
+| `dema_fusion` | Magneto 候选 | `0.4 × Jev-Single + 0.6 × COMA++` | **DeMa 基础版本** |
+| `dema_single` | Magneto 候选 | Jev 只查看当前候选 | 去除 COMA++ 的消融 |
+| `dema_shared` | Magneto 候选 | Jev 查看全部 Top-20 | context 消融 |
+| `dema_own_retrieval` | DeMa 原始检索 | Jev 查看全部 Top-20 | retrieval 消融 |
+
+`dema_fusion`、`dema_shared` 和 `dema_single` 复用 Magneto 的数据清洗、MPNet 序列化、mixed
+sampling、exact-name match、阈值、Top-20、候选顺序及 dataset-specific 编码；Jev
+看到的列名和 sampled values 也与 Magneto Qwen prompt 一致且不额外加入 dtype。
+`dema_fusion` 对同一输入另行计算 COMA++ 的 schema/instance 分数，只在 Magneto
+Top-20 内用固定原始分数公式重排；COMA++ 双向筛选未选中的 pair 记为 0。该方法不含
+训练参数或额外 LLM ranker。`dema_own_retrieval` 保留 DeMa 原始 profile（类型和频率
+采样）用于隔离 retrieval 的影响。旧方法名 `dema` 仅为已有 single + own-retrieval
+结果保留，不再列入默认实验。
+
+## 当前基础结果
+
+下面是 `experiment_dev.yaml` 当前选取的 29 个有效 case 的 case-macro 结果。
+`dema_fusion` 由已经保存的 `dema_single` 与 COMA++ 候选级分数离线复算确认；正式运行
+使用完全相同的固定公式。它不是逐 case 选择较优方法的 oracle。
+
+| 方法 | MRR | Recall@GT | Hits@1 | Hits@5 | Recall@5 | Recall@10 | Recall@20 | NDCG@10 | MAP | 平均时间/case |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Magneto-Qwen | 0.9501 | 0.8259 | 0.9386 | 0.9658 | 0.9440 | 0.9594 | 0.9683 | 0.9500 | 0.9431 | 133.72s |
+| **DeMa-Fusion** | **0.9343** | **0.8050** | **0.9097** | **0.9726** | **0.9583** | **0.9643** | **0.9683** | **0.9401** | **0.9287** | 约 17.1s¹ |
+| COMA++ | 0.9162 | 0.7382 | 0.9078 | 0.9271 | 0.8938 | 0.8948 | 0.9000 | 0.9089 | 0.9037 | 0.50s |
+| DeMa-Single | 0.8845 | 0.6778 | 0.8301 | 0.9580 | 0.9409 | 0.9643 | 0.9683 | 0.9023 | 0.8781 | 16.59s |
+
+¹ 尚未对正式 `dema_fusion` runner 单独计时；17.1s 是 DeMa-Single 与 COMA++
+现有平均时间顺序相加的估计值。
+
+各数据集的 MRR：
+
+| 方法 | ChEMBL | GDC | Magellan | OpenData | TPC-DI | WikiData |
+|---|---:|---:|---:|---:|---:|---:|
+| Magneto-Qwen | 1.0000 | 0.7768 | 1.0000 | 0.9887 | 0.9933 | 0.9396 |
+| **DeMa-Fusion** | **0.8604** | **0.8133** | **1.0000** | **0.9887** | **1.0000** | **0.9458** |
+| COMA++ | 0.9758 | 0.5972 | 1.0000 | 0.9840 | 1.0000 | 0.9458 |
+| DeMa-Single | 0.7894 | 0.7578 | 0.9217 | 0.9737 | 0.9933 | 0.8677 |
+
+后续改进分为两条独立路线：基于置信度的动态融合权重（重点解决 ChEMBL），以及只对
+低置信度 Top-3/Top-5 候选调用的小型 LLM ranker。
+
+详细实现审计见：
+
+- [Baseline audit](docs/BASELINE_AUDIT.md)
+- [DeMa model and performance audit](docs/MODEL_AUDIT.md)
+
+## 保存格式
+
+```text
+saves/predictions/<method>/<dataset>/<case_id>.json
+saves/runtime/<method>/<dataset>/<case_id>.json
+saves/status/<method>/<dataset>/<case_id>.json
+saves/debug/<run_id>/<method>/<dataset>/<case_id>.jsonl
+saves/manifests/<run_id>.json
+saves/scalability/{raw,predictions}/...
+saves/scalability/summary.csv
+
+logs/cases/<method>/<dataset>/<case_id>.log
+logs/lanes/<lane>/...
+
+metrics/per_case.csv
+metrics/per_dataset.csv
+metrics/overall.csv
+metrics/completeness.csv
+```
+
+一个 case 只有同时满足以下条件才会被 `--resume` 跳过：status 是 success、prediction hash 一致、runtime 存在，并且每个 source column 都有完整且无重复的 target ranking。失败或写到一半的 case 会重跑。
+
+## 配置
+
+- `configs/paths.yaml`：所有根目录和原始数据地址。
+- `configs/models.yaml`：列表示、检索、模型服务和 baseline 参数。
+- `configs/experiment.yaml`：正式 561-case 实验。
+- `configs/experiment_dev.yaml`：每个数据集最多 5 个 case，用于迭代。
+- `configs/scalability.yaml`：目标 schema 宽度实验，当前为每数据集 2 个 case、3 次重复。
+
+不要直接用正式配置验证代码改动。先用 `experiment_dev.yaml` 或 `--limit 1`；完整实验会产生 13,522 个以上的 source-column 推理单元。
+
+## 指标
+
+所有方法统一由 `dema.metrics` 评估，模型代码不接触 ground truth。主要指标包括 MRR、Recall@GT、Hits@1/5/10、Recall@1/5/10/20、NDCG@5/10 和 MAP。`per_dataset.csv` 对 case 做宏平均，`overall.csv` 同时报告 case-macro 与 dataset-macro。
+
+## 测试
+
+```bash
+source scripts/_env.sh
+$PYTHON -m pytest
+DEMA_SLOW_TESTS=1 $PYTHON -m pytest   # 会加载/下载 ISResMat 和 Unicorn 模型
 ```

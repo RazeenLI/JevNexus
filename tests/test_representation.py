@@ -1,9 +1,9 @@
 import numpy as np
 import pandas as pd
 
-from dema.representation.profiler import infer_type, profile_table
-from dema.representation.sampler import non_null_strings, sample_values
-from dema.representation.serializer import serialize_profile
+from dema.model.representation.profile import infer_type, profile_table
+from dema.model.representation.sampling import non_null_strings, sample_values
+from dema.model.representation.serialization import serialize_profile
 
 REP = {"max_values": 3, "sampling": "frequency", "include_dtype": True, "max_value_chars": 64,
        "type_min_fraction": 1.0, "datetime_min_fraction": 0.9, "mixed_min_numeric_fraction": 0.2}

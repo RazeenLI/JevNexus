@@ -1,8 +1,8 @@
 """Helpers shared by the traditional baselines.
 
-Every baseline implements :class:`dema.models.base.BaseMatcher`, reads the same
+Every baseline implements :class:`dema.model.base.BaseMatcher`, reads the same
 processed benchmark through the runner and returns a complete ranking built by
-:func:`dema.models.ranking.ranking_from_scores`. Baselines never see ground
+:func:`dema.model.ranking.ranking_from_scores`. Baselines never see ground
 truth and never compute metrics themselves.
 """
 
@@ -13,9 +13,9 @@ from typing import Any
 import pandas as pd
 
 from ..data.types import Match
-from ..evaluation.runtime import GpuMemoryProbe, RuntimeStats, timed
-from ..models.base import BaseMatcher
-from ..models.ranking import ranking_from_scores
+from ..metrics.runtime import GpuMemoryProbe, RuntimeStats, timed
+from ..model.base import BaseMatcher
+from ..model.ranking import ranking_from_scores
 
 
 class ScoreMatrixBaseline(BaseMatcher):

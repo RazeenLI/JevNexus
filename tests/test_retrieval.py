@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from dema.data.types import ColumnProfile
-from dema.models.retriever import CandidateCache, CandidateRetriever, cosine_matrix, order_targets
+from dema.model.retrieval import CandidateCache, CandidateRetriever, cosine_matrix, order_targets
 
 from conftest import trigram_encoder
 

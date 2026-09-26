@@ -9,7 +9,7 @@ methods:
   - isresmat
   - unicorn
   - magneto_qwen
-  - dema
+  - dema_shared
 
 target_sizes:
   - 50
@@ -18,10 +18,10 @@ target_sizes:
   - 400
   - 800
 
-repeats: 10
+repeats: 3
 
 # Cases per dataset to use (null = all cases of the dataset).
-max_cases_per_dataset: null
+max_cases_per_dataset: 2
 
 # When a target schema has fewer columns than a requested size, the
 # (case, size) unit is recorded as "insufficient_columns" and skipped.

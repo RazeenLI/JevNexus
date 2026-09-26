@@ -10,11 +10,18 @@ data/processed/*
 data/manifests/*
 !data/**/.gitkeep
 
-# Experiment outputs.
-outputs/*
-!outputs/*/
-outputs/*/*
-!outputs/*/.gitkeep
-
-# Local model checkpoints / serving environments.
-checkpoints/
+# Runtime artifacts are separated by purpose; keep only directory markers.
+models/checkpoints/*
+!models/checkpoints/.gitkeep
+cache/*
+!cache/.gitkeep
+logs/*
+!logs/*/
+logs/*/*
+!logs/*/.gitkeep
+saves/*
+!saves/*/
+saves/*/*
+!saves/*/.gitkeep
+metrics/*
+!metrics/.gitkeep

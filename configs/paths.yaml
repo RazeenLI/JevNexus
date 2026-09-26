@@ -2,7 +2,15 @@
 raw_data: data/raw
 processed_data: data/processed
 manifest: data/manifests/all.jsonl
-outputs: outputs
+
+# Generated artifacts are deliberately separated by purpose.  There is no
+# catch-all "outputs" directory: saved experiment state, human-readable logs,
+# final metric tables, and disposable caches have different lifecycles.
+models: models/checkpoints
+saves: saves
+logs: logs
+metrics: metrics
+cache: cache
 
 # Raw benchmark sources (Magneto evaluation collection).
 # Archives are stored under <raw_data>/downloads and never modified.

@@ -1,20 +1,10 @@
 import pytest
 
-from dema.models.decision_reranker import DecisionReranker, parse_decision_response
-from dema.models.generative_reranker import RerankerOutputError, parse_score_response
 from dema.data.types import ColumnProfile
+from dema.model.contracts import RerankerOutputError, load_json_strict, validate_probability_map
+from dema.model.decision import DecisionReranker, parse_decision_response
 
 IDS = ["c0", "c1", "c2"]
-
-
-# ---------------------------------------------------------------- Qwen output
-def test_qwen_valid_response():
-    assert parse_score_response('{"c0": 0.91, "c1": 0.14, "c2": 0}', IDS) == {"c0": 0.91, "c1": 0.14, "c2": 0.0}
-
-
-def test_qwen_accepts_fences_and_empty_think():
-    text = '<think>\n\n</think>\n```json\n{"c0": 1, "c1": 0.5, "c2": 0.2}\n```'
-    assert parse_score_response(text, IDS)["c0"] == 1.0
 
 
 @pytest.mark.parametrize("text, message", [
@@ -27,11 +17,11 @@ def test_qwen_accepts_fences_and_empty_think():
     ('{"c0": true, "c1": 0.1, "c2": 0.3}', "not a number"),
     ('{"c0": NaN, "c1": 0.1, "c2": 0.3}', "non-finite"),
     ('{"c0": 0.9, "c1": 0.1, "c2": 0.3', "JSON"),
-    ("I think c0 matches.", "no JSON"),
+    ("I think c0 matches.", "JSON"),
 ])
-def test_qwen_invalid_responses(text, message):
+def test_probability_contract_rejects_invalid_responses(text, message):
     with pytest.raises(RerankerOutputError, match=message):
-        parse_score_response(text, IDS)
+        validate_probability_map(load_json_strict(text), IDS)
 
 
 # ------------------------------------------------------------ decision output
@@ -62,12 +52,13 @@ def test_decision_probability_range():
 
 def test_decision_request_has_no_retrieval_information():
     cfg = {"model": "m", "base_url": "http://x", "prompt": {
-        "question": "Does candidate {cid} match?", "question_single": "{candidate}", "criteria": None}}
+        "question": "Does candidate {cid} match?", "question_single": "{candidate}", "criteria": None},
+        "candidate_context": "single"}
     rr = DecisionReranker(cfg, backend=object())
     state, questions = rr.build_request(
         ColumnProfile("a", "string", ("1",)), [("c0", ColumnProfile("b", "integer", ("2",)))]
     )
     blob = repr(state) + repr(questions)
     assert "retrieval" not in blob and "rank" not in blob and "score" not in blob
-    assert questions == {"c0": {"type": "noul", "instructions": "Does candidate c0 match?"}}
-    assert state["candidates"]["c0"] == {"name": "b", "type": "integer", "values": ["2"]}
+    assert questions["c0"]["instructions"] == "name: b\ntype: integer\nvalues: 2"
+    assert "candidates" not in state

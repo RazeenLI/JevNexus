@@ -1,56 +1,131 @@
-"""magneto_qwen and dema against fake model servers."""
+"""DeMa integration and the upstream-Magneto adapter."""
 
 import pytest
 
 from dema.data.loader import load_case
-from dema.models.generative_reranker import RerankerFailure
-from dema.models.registry import build_matcher
-from dema.models.ranking import validate_ranking
-from dema.runner import OutputPaths, run, unit_state
+from dema.experiments.runner import ExperimentPaths, run, unit_state
+from dema.model.base import CaseContext
+from dema.model.fusion import FixedScoreFusionReranker
+from dema.model.ranking import validate_ranking
+from dema.data.types import ColumnProfile
+from dema.metrics.runtime import RuntimeStats
+from dema.model.registry import build_matcher
 from dema.utils.io import read_json
 
 from conftest import trigram_encoder
 
 
+class _FixedDecision:
+    context = "single"
+    include_dtype = False
+
+    def score(self, source, candidates, stats, debug=None):
+        return {"c0": 0.5, "c1": 0.2}
+
+    def describe(self):
+        return {"type": "fixed-test-decision"}
+
+
+def test_fixed_fusion_uses_raw_scores_and_zero_for_unselected_coma_pair():
+    reranker = FixedScoreFusionReranker(_FixedDecision(), 0.4, 0.6)
+    reranker.coma_scores = {("source", "target_a"): 0.75}
+    source = ColumnProfile("source", "", ())
+    candidates = [
+        ("c0", ColumnProfile("target_a", "", ())),
+        ("c1", ColumnProfile("target_b", "", ())),
+    ]
+
+    scores = reranker.score(source, candidates, RuntimeStats())
+
+    assert scores == pytest.approx({"c0": 0.65, "c1": 0.08})
+
+
+class _FakeMagnetoStats:
+    STATS = {"requests": 0, "input_tokens": 0, "output_tokens": 0}
+
+    @classmethod
+    def reset_stats(cls):
+        for key in cls.STATS:
+            cls.STATS[key] = 0
+
+
+class _FakeUpstreamMagneto:
+    last_params = None
+
+    def __init__(self, **params):
+        type(self).last_params = params
+
+    def get_matches(self, source_df, target_df):
+        return {
+            (("source", str(source)), ("target", str(target))): float(source == target)
+            for source in source_df.columns for target in target_df.columns
+        }
+
+
 def matcher(method, config):
     m = build_matcher(method, config)
-    m.retriever._encoder = trigram_encoder  # no model download in tests
+    if method == "dema":
+        m.retrieval._encoder = trigram_encoder  # no model download in tests
+    elif method == "magneto_qwen":
+        m._magneto_cls = _FakeUpstreamMagneto
+        m._llm = _FakeMagnetoStats
     return m
 
 
-def test_both_rerankers_get_identical_inputs(mini_benchmark, fake_servers):
+def test_dema_uses_single_candidate_questions(mini_benchmark, fake_servers):
     config, records = mini_benchmark
-    qwen, decision = fake_servers
+    _, decision = fake_servers
     config.models["retriever"]["top_k"] = 3
     case = load_case(records[0])
-    mq, md = matcher("magneto_qwen", config), matcher("dema", config)
-    assert mq.profiles(case.source_df, case.target_df) == md.profiles(case.source_df, case.target_df)
-    rq = mq.match(case.source_df, case.target_df)
-    rd = md.match(case.source_df, case.target_df)
-    for ranking in (rq, rd):
-        validate_ranking(ranking, list(case.source_df.columns), list(case.target_df.columns))
-    top = lambda r: {(m.source_column, m.target_column, m.retrieval_score) for m in r if m.reranker_score is not None}
-    assert top(rq) == top(rd)  # same candidate sets and retrieval scores
-    assert md.last_runtime.retrieval_cache_hit  # dema reused magneto's cached candidates
-    assert md.last_runtime.model_requests == case.source_df.shape[1]
-    # decision requests: one noul question per candidate, no retrieval information
-    for req in decision.requests:
-        assert all(q["type"] == "noul" for q in req["questions"].values())
-        assert len(req["questions"]) == 3
-        assert "retrieval" not in req["state"] and "score" not in req["state"]
-    for req in qwen.requests:
-        assert req["temperature"] == 0 and req["chat_template_kwargs"] == {"enable_thinking": False}
+    m = matcher("dema", config)
+    ranking = m.match(case.source_df, case.target_df)
+    validate_ranking(ranking, list(case.source_df.columns), list(case.target_df.columns))
+    assert m.last_runtime.model_requests == case.source_df.shape[1]
+    for request in decision.requests:
+        assert len(request["questions"]) == 3
+        assert "Candidate target columns" not in request["state"]
+        for question in request["questions"].values():
+            assert question["type"] == "noul"
+            assert "name:" in question["instructions"]
+            assert "retrieval" not in question["instructions"]
 
 
-def test_invalid_output_retries_then_fails_without_fallback(mini_benchmark, fake_servers):
-    config, records = mini_benchmark
-    qwen, _ = fake_servers
-    qwen.mode = "invalid_json"
-    case = load_case(records[0])
+def test_registered_dema_variants_have_separate_context_and_retrieval(config):
+    fusion = build_matcher("dema_fusion", config)
+    shared = build_matcher("dema_shared", config)
+    single = build_matcher("dema_single", config)
+    own = build_matcher("dema_own_retrieval", config)
+
+    assert fusion.reranker.context == "single"
+    assert fusion.reranker.jev_weight == 0.4
+    assert fusion.reranker.coma_plus_weight == 0.6
+    assert shared.reranker.context == "shared"
+    assert single.reranker.context == "single"
+    assert own.reranker.context == "shared"
+    assert shared.reranking_cfg["candidate_order"] == "retrieval"
+    assert single.reranking_cfg["candidate_order"] == "retrieval"
+    assert shared.reranker.include_dtype is False
+    assert single.reranker.include_dtype is False
+    assert type(shared.retrieval).__name__ == "MagnetoCandidateRetriever"
+    assert type(fusion.retrieval).__name__ == "MagnetoCandidateRetriever"
+    assert type(single.retrieval).__name__ == "MagnetoCandidateRetriever"
+    assert type(own.retrieval).__name__ == "CandidateRetriever"
+
+
+def test_magneto_adapter_keeps_upstream_pipeline_and_dataset_params(config):
+    import pandas as pd
+
     m = matcher("magneto_qwen", config)
-    with pytest.raises(RerankerFailure):
-        m.match(case.source_df, case.target_df)
-    assert len(qwen.requests) == 2  # 1 attempt + max_retries=1
+    m.set_case_context(CaseContext("GDC", "toy"))
+    source = pd.DataFrame({"id": [1], "name": ["a"]})
+    target = pd.DataFrame({"id": [1], "label": ["a"], "other": [2]})
+    ranking = m.match(source, target)
+    validate_ranking(ranking, list(source.columns), list(target.columns))
+    params = _FakeUpstreamMagneto.last_params
+    assert params["embedding_model"] == "mpnet"
+    assert params["use_gpt_reranker"] is True
+    assert params["use_bp_reranker"] is False
+    assert params["encoding_mode"] == "header_values_default"
 
 
 def test_runner_marks_failed_case_and_keeps_it_visible(mini_benchmark, fake_servers):
@@ -59,7 +134,7 @@ def test_runner_marks_failed_case_and_keeps_it_visible(mini_benchmark, fake_serv
     decision.mode = "out_of_range"
     counts = run(config, "dema", ["GDC"], matcher=matcher("dema", config), argv=["test"])
     assert counts == {"skipped": 0, "success": 0, "failed": 1}
-    paths = OutputPaths(config.outputs_dir)
+    paths = ExperimentPaths.from_config(config)
     rec = next(r for r in records if r.dataset == "GDC")
     assert unit_state(paths, "dema", rec) == "failed"
     assert not paths.prediction("dema", "GDC", rec.case_id).exists()
@@ -71,21 +146,21 @@ def test_runner_marks_failed_case_and_keeps_it_visible(mini_benchmark, fake_serv
     assert counts["success"] == 1 and unit_state(paths, "dema", rec) == "complete"
 
 
-def test_full_run_writes_all_outputs_and_evaluates(mini_benchmark, fake_servers):
-    from dema.evaluation.evaluator import evaluate
+def test_full_run_writes_separated_artifacts_and_evaluates(mini_benchmark, fake_servers):
+    from dema.metrics.evaluator import evaluate
 
     config, records = mini_benchmark
     for method in ("magneto_qwen", "dema", "coma"):
         m = matcher(method, config) if method != "coma" else None
         assert run(config, method, ["GDC", "OpenData"], matcher=m, argv=["t"])["failed"] == 0
-    paths = OutputPaths(config.outputs_dir)
+    paths = ExperimentPaths.from_config(config)
     for rec in records:
         doc = read_json(paths.prediction("dema", rec.dataset, rec.case_id))
         assert len(doc["predictions"]) == rec.n_source_columns
-        assert all(len(v) == rec.n_target_columns for v in doc["predictions"].values())
-        rt = read_json(paths.runtime("dema", rec.dataset, rec.case_id))
-        assert rt["total_seconds"] >= rt["reranking_seconds"] >= 0
-    manifests = list((config.outputs_dir / "manifests").glob("*.json"))
+        assert all(len(values) == rec.n_target_columns for values in doc["predictions"].values())
+        assert paths.log("dema", rec.dataset, rec.case_id).is_relative_to(config.logs_dir)
+        assert paths.prediction("dema", rec.dataset, rec.case_id).is_relative_to(config.saves_dir)
+    manifests = list((config.saves_dir / "manifests").glob("*.json"))
     assert manifests and "git_commit" in read_json(manifests[0])
     tables = evaluate(config, ["coma", "magneto_qwen", "dema"], ["GDC", "OpenData"])
     assert len(tables["per_case"]) == 6

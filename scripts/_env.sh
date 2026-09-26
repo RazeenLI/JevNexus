@@ -3,6 +3,9 @@
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 PYTHON="${PYTHON:-$HOME/miniconda3/envs/airdb/bin/python}"
+EXPERIMENT_CONFIG="${EXPERIMENT_CONFIG:-configs/experiment.yaml}"
+SCALABILITY_CONFIG="${SCALABILITY_CONFIG:-configs/scalability.yaml}"
+export EXPERIMENT_CONFIG SCALABILITY_CONFIG
 export PYTHONPATH="$REPO_ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
 export PYTHONUNBUFFERED=1
 
@@ -19,5 +22,5 @@ PY
 
 # Datasets from experiment.yaml (space separated).
 experiment_datasets() {
-    "$PYTHON" -c 'import yaml; print(" ".join(yaml.safe_load(open("configs/experiment.yaml"))["datasets"]))'
+    "$PYTHON" -c 'import sys, yaml; print(" ".join(yaml.safe_load(open(sys.argv[1]))["datasets"]))' "$EXPERIMENT_CONFIG"
 }

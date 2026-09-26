@@ -1,0 +1,12 @@
+pandas
+openai
+transformers
+torch>=2.3.1
+valentine
+fuzzywuzzy
+mmh3
+scikit-learn
+sentence_transformers
+tiktoken
+json_repair
+litellm

@@ -40,6 +40,24 @@ def read_manifest(path: Path) -> list[CaseRecord]:
     return [CaseRecord(**row) for row in read_jsonl(path)]
 
 
+def spread_per_dataset(records: list[CaseRecord], n: int | None) -> list[CaseRecord]:
+    """At most ``n`` cases per dataset, evenly spaced over the sorted case list
+    (covers all relatedness types, deterministic). ``None`` keeps everything."""
+    if not n:
+        return records
+    by: dict[str, list[CaseRecord]] = {}
+    for r in records:
+        by.setdefault(r.dataset, []).append(r)
+    out = []
+    for rows in by.values():
+        rows = sorted(rows, key=lambda r: r.case_id)
+        if len(rows) <= n:
+            out += rows
+        else:
+            out += [rows[round(i * (len(rows) - 1) / (n - 1))] for i in range(n)] if n > 1 else rows[:1]
+    return out
+
+
 def select_cases(
     records: list[CaseRecord],
     datasets: Iterable[str] | None = None,

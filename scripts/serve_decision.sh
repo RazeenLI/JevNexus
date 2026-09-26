@@ -22,6 +22,8 @@ local_dir="$(cfg serving.decision.local_dir)"
 subdir="$(cfg serving.decision.checkpoint_subdir)"
 max_len="$(cfg serving.decision.max_length)"
 device="$(cfg serving.decision.device)"
+batch_size="$(cfg serving.decision.batch_size)"
+prefix_cache="$(cfg serving.decision.prefix_cache)"
 checkpoint="${DECISION_CHECKPOINT:-$local_dir/$subdir}"
 
 if ! "$DECISION_PYTHON" -c "import jev.server, peft" >/dev/null 2>&1; then
@@ -38,5 +40,9 @@ if [[ ! -d "$checkpoint" ]]; then
     "$DECISION_PYTHON" -c "from huggingface_hub import snapshot_download; snapshot_download('$repo', revision='$revision', local_dir='$local_dir')"
 fi
 echo "[serve_decision] checkpoint=$checkpoint endpoint=http://$host:$port/v1/systemone"
-exec "$DECISION_PYTHON" -m jev.server --checkpoint "$checkpoint" --device "$device" \
-    --max-length "$max_len" --batch-size 1 --no-prefix-cache --host "$host" --port "$port"
+args=(--checkpoint "$checkpoint" --device "$device" --max-length "$max_len"
+      --batch-size "$batch_size" --host "$host" --port "$port")
+if [[ "$prefix_cache" != "true" ]]; then
+    args+=(--no-prefix-cache)
+fi
+exec "$DECISION_PYTHON" -m jev.server "${args[@]}"

@@ -1,0 +1,37 @@
+# Fast-iteration subset: 5 evenly spaced cases per dataset (30 cases).
+seed: 42
+datasets:
+- GDC
+- ChEMBL
+- Magellan
+- OpenData
+- TPC-DI
+- WikiData
+methods:
+- coma
+- coma_plus
+- distribution
+- similarity_flooding
+- isresmat
+- unicorn
+- magneto_qwen
+- dema_fusion
+- dema_shared
+- dema_single
+- dema_own_retrieval
+resume: true
+save_full_rankings: true
+save_runtime: true
+on_failure: continue
+debug_max_cases: 3
+smoke_test:
+  cases:
+  - dataset: GDC
+    index: 0
+  - dataset: OpenData
+    index: 0
+  methods:
+  - coma
+  - magneto_qwen
+  - dema_fusion
+max_cases_per_dataset: 5

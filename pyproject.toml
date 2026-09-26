@@ -5,7 +5,7 @@ description = "DeMa — Decision-based Schema Matching (research codebase)"
 requires-python = ">=3.10"
 dependencies = [
     "numpy", "pandas", "PyYAML", "requests", "torch", "transformers", "sentence-transformers",
-    "huggingface_hub", "valentine>=1.0,<2", "rapidfuzz", "openpyxl",
+    "huggingface_hub", "valentine>=1.0,<2", "rapidfuzz", "openpyxl", "json-repair",
 ]
 
 [project.optional-dependencies]

@@ -18,12 +18,19 @@ retriever:
   device: auto           # auto | cpu | cuda | cuda:N
   normalize: true
 
-# Shared by magneto_qwen and dema: both rerankers see identical information.
+# DeMa candidate presentation. Magneto keeps its upstream representation.
 reranking:
   # Candidates are presented (and given ids c0..c{k-1}) in target-schema column
   # order, never in retrieval order, so neither reranker can infer retrieval rank.
   candidate_order: target_schema
   candidate_id_prefix: c
+
+# Training-free DeMa-Fusion baseline. These raw-score weights reproduce the
+# 29-case development result reported in README.md; COMA++-unselected pairs
+# receive score zero.
+fusion:
+  jev_weight: 0.4
+  coma_plus_weight: 0.6
 
 qwen:
   prompt:
@@ -49,10 +56,15 @@ decision:
   request_model: null     # value of the request "model" field (null = omit; the server uses its loaded model)
   timeout: 300
   max_retries: 3
+  # Default for the backward-compatible ``dema`` alias.  Registered experiment
+  # variants override this explicitly: dema_shared=shared, dema_single=single,
+  # dema_own_retrieval=shared.
   # How candidate information is laid out in the System One request:
   #   shared: state = source column + all candidates; one noul question per candidate id
   #   single: state = source column; each question carries its own candidate description
-  candidate_context: shared
+  # Single-candidate context is both semantically correct for independent binary
+  # judgments and much shorter than duplicating all 20 candidates 20 times.
+  candidate_context: single
   api_key_env: DECISION_API_KEY
   prompt:
     question: Does candidate {cid} represent the same underlying schema attribute as the source column?
@@ -80,32 +92,34 @@ serving:
     # Qwen3.5-9B revision below.
     hf_repo: ZefanCai/Open-Jev-9B
     hf_revision: 47e966881e489511c0c7f5633a9e1960a676a551
-    local_dir: checkpoints/open-jev-9b
+    local_dir: models/checkpoints/open-jev-9b
     checkpoint_subdir: package/checkpoint
     base_model_revision: c202236235762e1c871ad0ccb60c8ee5ba337b9a
     max_length: 4096
     device: cuda:0
+    batch_size: 20
+    prefix_cache: true
 
 # ---------------------------------------------------------------- baselines
 baselines:
   coma:
-    # COMA schema-only (valentine pure-Python COMA). delta=1.0 / threshold=0 keep
-    # every scored pair so that a complete ranking can be produced.
+    # Parameters used by data-harmonization-benchmark's COMA wrapper.
     use_schema: true
     use_instances: false
-    max_n: 0
-    delta: 1.0
+    max_n: 20
+    delta: 0.15
     threshold: 0.0
     instance_sample_size: 1000
   coma_plus:
     # COMA++ = COMA with the instance matcher enabled (Magneto's "ComaInst").
     use_schema: true
     use_instances: true
-    max_n: 0
-    delta: 1.0
+    max_n: 20
+    delta: 0.15
     threshold: 0.0
     instance_weight: 1.0
     instance_sample_size: 500
+    sample_seed: 42
   distribution:
     threshold1: 0.15
     threshold2: 0.15
@@ -156,3 +170,27 @@ baselines:
     size_output: 768
     units: 768
     score: match_logit        # match_logit (reference behaviour) | match_probability
+
+# ------------------------------------------------ original Magneto (magneto_qwen)
+# Vendored upstream code: vendor/magneto (VIDA-NYU/magneto-matcher @ 6620623,
+# see vendor/magneto/PATCHES.md). Only the LLM backend is swapped to the
+# local Qwen3.5-9B endpoint (qwen.base_url / qwen.served_model_name).
+# Parameters reproduce Magneto's own benchmark scripts for the zero-shot
+# "MagnetoGPT" variant: Magneto(use_bp_reranker=False, use_gpt_reranker=True),
+# embedding_model mpnet; GDC uses the gdc_benchmark.py CLI default encoding mode,
+# Valentine the Magneto DEFAULT_PARAMS (header_values_verbose).
+magneto:
+  params:
+    embedding_model: mpnet
+    use_bp_reranker: false
+    use_gpt_reranker: true
+  params_by_dataset:
+    GDC:
+      encoding_mode: header_values_default
+  # forwarded to every chat completion (Magneto's llm_model_kwargs)
+  llm_model_kwargs:
+    temperature: 0
+  # extra request fields for the Qwen server: non-thinking mode as in CoRE
+  extra_body:
+    chat_template_kwargs:
+      enable_thinking: false

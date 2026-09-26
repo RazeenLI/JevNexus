@@ -16,7 +16,10 @@ methods:
   - isresmat
   - unicorn
   - magneto_qwen
-  - dema
+  - dema_fusion
+  - dema_shared
+  - dema_single
+  - dema_own_retrieval
 
 resume: true
 save_full_rankings: true
@@ -37,4 +40,4 @@ smoke_test:
   methods:
     - coma
     - magneto_qwen
-    - dema
+    - dema_fusion

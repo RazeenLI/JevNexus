@@ -2,7 +2,7 @@ import math
 
 import pytest
 
-from dema.evaluation.metrics import (
+from dema.metrics.metrics import (
     all_metrics, hits_at_k, mean_average_precision, mrr, ndcg_at_k, recall_at_gt, recall_at_k,
 )
 

@@ -5,8 +5,8 @@ import os
 import pandas as pd
 import pytest
 
-from dema.models.ranking import validate_ranking
-from dema.models.registry import build_matcher
+from dema.model.ranking import validate_ranking
+from dema.model.registry import build_matcher
 
 SRC = pd.DataFrame({"name": ["alice", "bob", "carol"], "age": [31, 45, 27], "city": ["Paris", "Oslo", "Rome"]})
 TGT = pd.DataFrame({"full_name": ["dave", "erin", "alice"], "years": [30, 44, 28],
