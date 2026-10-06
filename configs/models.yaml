@@ -48,6 +48,11 @@ jina_rerank:
   top_n: 3
   include_scores: true
 
+# Canonical DeMa invokes the listwise refiner only when the independently
+# scored Jev and COMA+ top choices disagree and the fused top-two margin is low.
+selective_refinement:
+  margin_threshold: 0.02
+
 qwen:
   prompt:
     system: You are an expert in database schema matching.

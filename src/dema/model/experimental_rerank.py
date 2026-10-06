@@ -190,14 +190,22 @@ class JinaTopReranker:
         base: FixedScoreFusionReranker,
         cfg: dict[str, Any],
         listwise_model: JinaListwiseModel | None = None,
+        gate_cfg: dict[str, Any] | None = None,
     ):
         self.base = base
         self.cfg = dict(cfg)
         self.top_n = int(cfg.get("top_n", 3))
         self.include_scores = bool(cfg.get("include_scores", True))
         self.listwise_model = listwise_model or JinaListwiseModel(cfg)
+        self.gate_cfg = dict(gate_cfg) if gate_cfg is not None else None
+        self.margin_threshold = (
+            float(self.gate_cfg.get("margin_threshold", 0.02))
+            if self.gate_cfg is not None else None
+        )
         if self.top_n <= 1:
             raise ValueError("Jina top_n must be greater than one")
+        if self.margin_threshold is not None and self.margin_threshold < 0:
+            raise ValueError("selective-refinement margin_threshold must be non-negative")
 
     @property
     def context(self) -> str:
@@ -220,11 +228,12 @@ class JinaTopReranker:
 
     def describe(self) -> dict[str, Any]:
         return {
-            "type": "jina_listwise_top_n",
+            "type": "gated_jina_listwise_top_n" if self.gate_cfg is not None else "jina_listwise_top_n",
             "model": self.cfg["model"],
             "revision": self.cfg.get("revision"),
             "top_n": self.top_n,
             "include_scores": self.include_scores,
+            "gate": dict(self.gate_cfg) if self.gate_cfg is not None else None,
             "base": self.base.describe(),
         }
 
@@ -241,6 +250,59 @@ class JinaTopReranker:
         }
         profile_by_id = dict(candidates)
         top_ids = sorted(fusion_scores, key=lambda cid: -fusion_scores[cid])[: self.top_n]
+        fusion_order = sorted(fusion_scores, key=lambda cid: -fusion_scores[cid])
+        fusion_ranks = {candidate_id: rank for rank, candidate_id in enumerate(fusion_order, 1)}
+
+        disagreement = False
+        margin = None
+        gate_activated = True
+        if self.gate_cfg is not None:
+            stats.gate_evaluations += 1
+            jev_top = max(jev_scores, key=jev_scores.get)
+            # COMA+ returns zero for pairs it did not select. If every score is
+            # zero it has expressed no preference, so disagreement is undefined
+            # and refinement is conservatively bypassed.
+            if any(score > 0.0 for score in coma_scores.values()):
+                coma_top = max(coma_scores, key=coma_scores.get)
+                disagreement = jev_top != coma_top
+            if len(fusion_order) >= 2:
+                margin = fusion_scores[fusion_order[0]] - fusion_scores[fusion_order[1]]
+            gate_activated = bool(
+                disagreement
+                and margin is not None
+                and margin < self.margin_threshold
+            )
+
+        if not gate_activated:
+            self.last_score_details = {
+                candidate_id: {
+                    "jev_score": float(jev_scores[candidate_id]),
+                    "coma_plus_score": float(coma_scores[candidate_id]),
+                    "fusion_score": float(fusion_scores[candidate_id]),
+                    "fusion_rank": fusion_ranks[candidate_id],
+                    "jina_applied": False,
+                    "jina_score": None,
+                    "jina_rank": None,
+                    "gate_activated": False,
+                    "gate_disagreement": disagreement,
+                    "gate_margin": float(margin) if margin is not None else None,
+                    "gate_threshold": self.margin_threshold,
+                }
+                for candidate_id, _ in candidates
+            }
+            if debug:
+                debug({
+                    "model": "selective_refinement_gate",
+                    "source_column": source.name,
+                    "activated": False,
+                    "disagreement": disagreement,
+                    "margin": margin,
+                    "threshold": self.margin_threshold,
+                })
+            return fusion_scores
+
+        if self.gate_cfg is not None:
+            stats.gate_activations += 1
         query = describe_column(source, include_dtype=False)
         documents = []
         for candidate_id in top_ids:
@@ -253,6 +315,7 @@ class JinaTopReranker:
                 )
             documents.append(document)
         stats.model_requests += 1
+        stats.jina_requests += 1
         try:
             results = self.listwise_model.rerank(query, documents)
         except Exception as exc:  # noqa: BLE001 - third-party custom model boundary
@@ -273,6 +336,35 @@ class JinaTopReranker:
         output = dict(fusion_scores)
         for candidate_id, score_value in zip(ranked_ids, score_slots):
             output[candidate_id] = score_value
+        result_by_id = {
+            top_ids[int(result["index"])]: result for result in results
+        }
+        jina_ranks = {candidate_id: rank for rank, candidate_id in enumerate(ranked_ids, 1)}
+        self.last_score_details = {}
+        for candidate_id, profile in candidates:
+            result = result_by_id.get(candidate_id)
+            raw_jina_score = None
+            if result is not None:
+                raw_jina_score = result.get("relevance_score", result.get("score"))
+            detail = {
+                "jev_score": float(jev_scores[candidate_id]),
+                "coma_plus_score": float(
+                    self.coma_scores.get((source.name, profile.name), 0.0)
+                ),
+                "fusion_score": float(fusion_scores[candidate_id]),
+                "fusion_rank": fusion_ranks[candidate_id],
+                "jina_applied": candidate_id in result_by_id,
+                "jina_score": float(raw_jina_score) if raw_jina_score is not None else None,
+                "jina_rank": jina_ranks.get(candidate_id),
+            }
+            if self.gate_cfg is not None:
+                detail.update({
+                    "gate_activated": gate_activated,
+                    "gate_disagreement": disagreement,
+                    "gate_margin": float(margin) if margin is not None else None,
+                    "gate_threshold": self.margin_threshold,
+                })
+            self.last_score_details[candidate_id] = detail
         if debug:
             debug({
                 "model": "jina_reranker",
@@ -378,6 +470,30 @@ class DeMaJinaRerankMatcher(DeMaFusionMatcher):
         super().__init__(*args, **kwargs)
         self.fusion_reranker = JinaTopReranker(
             self.fusion_reranker, jina_cfg, listwise_model=listwise_model
+        )
+        self.reranker = self.fusion_reranker
+        self.name = type(self).name
+
+    def load(self) -> None:
+        super().load()
+        self.fusion_reranker.load()
+
+
+class DeMaGatedJinaMatcher(DeMaFusionMatcher):
+    """Canonical DeMa: refine only low-margin Jev/COMA+ disagreements."""
+
+    name = "dema"
+
+    def __init__(
+        self, *args, jina_cfg: dict[str, Any], gate_cfg: dict[str, Any],
+        listwise_model=None, **kwargs,
+    ):
+        super().__init__(*args, **kwargs)
+        self.fusion_reranker = JinaTopReranker(
+            self.fusion_reranker,
+            jina_cfg,
+            listwise_model=listwise_model,
+            gate_cfg=gate_cfg,
         )
         self.reranker = self.fusion_reranker
         self.name = type(self).name

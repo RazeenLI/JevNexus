@@ -30,6 +30,7 @@ def build_final_ranking(
     full_ordering: Sequence[Candidate],
     rerank_scores: dict[str, float],
     top_k: int,
+    score_details: dict[str, dict] | None = None,
 ) -> list[Match]:
     k = min(int(top_k), len(full_ordering))
     top, tail = list(full_ordering[:k]), list(full_ordering[k:])
@@ -39,12 +40,31 @@ def build_final_ranking(
     reranked = sorted(top, key=lambda c: (-rerank_scores[c.target_column], c.retrieval_rank))
     tail = sorted(tail, key=lambda c: c.retrieval_rank)
     matches = []
+    score_details = score_details or {}
     for rank, cand in enumerate(reranked, start=1):
         s = float(rerank_scores[cand.target_column])
-        matches.append(Match(cand.source_column, cand.target_column, s, rank, s, cand.retrieval_score))
+        detail = score_details.get(cand.target_column, {})
+        matches.append(Match(
+            cand.source_column, cand.target_column, s, rank, s, cand.retrieval_score,
+            retrieval_rank=cand.retrieval_rank,
+            jev_score=detail.get("jev_score"),
+            coma_plus_score=detail.get("coma_plus_score"),
+            fusion_score=detail.get("fusion_score"),
+            fusion_rank=detail.get("fusion_rank"),
+            jina_applied=detail.get("jina_applied"),
+            jina_score=detail.get("jina_score"),
+            jina_rank=detail.get("jina_rank"),
+            gate_activated=detail.get("gate_activated"),
+            gate_disagreement=detail.get("gate_disagreement"),
+            gate_margin=detail.get("gate_margin"),
+            gate_threshold=detail.get("gate_threshold"),
+        ))
     for rank, cand in enumerate(tail, start=len(reranked) + 1):
         matches.append(
-            Match(cand.source_column, cand.target_column, TAIL_SCORE, rank, None, cand.retrieval_score)
+            Match(
+                cand.source_column, cand.target_column, TAIL_SCORE, rank, None,
+                cand.retrieval_score, retrieval_rank=cand.retrieval_rank,
+            )
         )
     return matches
 

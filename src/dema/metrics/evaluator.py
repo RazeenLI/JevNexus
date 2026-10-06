@@ -30,6 +30,7 @@ RUNTIME_FIELDS = (
     "total_seconds", "representation_seconds", "retrieval_seconds", "reranking_seconds",
     "matching_seconds", "ranking_seconds", "model_requests", "input_tokens", "output_tokens",
     "retries", "failures", "peak_gpu_memory_mb",
+    "gate_evaluations", "gate_activations", "jina_requests",
 )
 
 

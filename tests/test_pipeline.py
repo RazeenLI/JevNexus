@@ -45,7 +45,11 @@ class _DynamicDecision(_FixedDecision):
 
 
 class _ReverseJinaModel:
+    def __init__(self):
+        self.calls = 0
+
     def rerank(self, query, documents, top_n=None):
+        self.calls += 1
         assert "name: source" in query
         assert all("Jev score" in document for document in documents)
         assert top_n == len(documents)
@@ -65,6 +69,13 @@ def test_fixed_fusion_uses_raw_scores_and_zero_for_unselected_coma_pair():
     scores = reranker.score(source, candidates, RuntimeStats())
 
     assert scores == pytest.approx({"c0": 0.65, "c1": 0.08})
+    assert reranker.last_score_details["c0"] == pytest.approx({
+        "jev_score": 0.5,
+        "coma_plus_score": 0.75,
+        "fusion_score": 0.65,
+        "fusion_rank": 1,
+        "jina_applied": False,
+    })
 
 
 def test_jev_dynamic_weight_maps_probability_to_bounded_weight():
@@ -102,6 +113,76 @@ def test_jina_reranker_only_permutes_top_scores():
 
     # Fixed scores are c0=.65, c1=.38; reversed Jina order swaps only the values.
     assert scores == pytest.approx({"c0": 0.38, "c1": 0.65})
+    assert reranker.last_score_details["c0"] == pytest.approx({
+        "jev_score": 0.5,
+        "coma_plus_score": 0.75,
+        "fusion_score": 0.65,
+        "fusion_rank": 1,
+        "jina_applied": True,
+        "jina_score": 0.0,
+        "jina_rank": 2,
+    })
+    assert reranker.last_score_details["c1"]["jina_score"] == pytest.approx(1.0)
+    assert reranker.last_score_details["c1"]["jina_rank"] == 1
+
+
+def test_gated_jina_runs_only_for_low_margin_disagreement():
+    class DisagreeDecision(_FixedDecision):
+        def score(self, source, candidates, stats, debug=None):
+            return {"c0": 0.2, "c1": 0.5}
+
+    base = FixedScoreFusionReranker(DisagreeDecision(), 0.4, 0.6)
+    base.coma_scores = {("source", "target_a"): 0.5, ("source", "target_b"): 0.0}
+    model = _ReverseJinaModel()
+    reranker = JinaTopReranker(
+        base,
+        {"model": "fake", "top_n": 2, "include_scores": True},
+        listwise_model=JinaListwiseModel({}, model=model),
+        gate_cfg={"margin_threshold": 0.2},
+    )
+    source = ColumnProfile("source", "", ())
+    candidates = [("c0", ColumnProfile("target_a", "", ())),
+                  ("c1", ColumnProfile("target_b", "", ()))]
+    stats = RuntimeStats()
+
+    scores = reranker.score(source, candidates, stats)
+
+    assert scores == pytest.approx({"c0": 0.2, "c1": 0.38})
+    assert model.calls == 1
+    assert stats.gate_evaluations == 1
+    assert stats.gate_activations == 1
+    assert stats.jina_requests == 1
+    assert reranker.last_score_details["c0"]["gate_disagreement"] is True
+    assert reranker.last_score_details["c0"]["gate_margin"] == pytest.approx(0.18)
+
+
+def test_gated_jina_bypasses_high_margin_disagreement():
+    class DisagreeDecision(_FixedDecision):
+        def score(self, source, candidates, stats, debug=None):
+            return {"c0": 0.2, "c1": 0.5}
+
+    base = FixedScoreFusionReranker(DisagreeDecision(), 0.4, 0.6)
+    base.coma_scores = {("source", "target_a"): 0.5, ("source", "target_b"): 0.0}
+    model = _ReverseJinaModel()
+    reranker = JinaTopReranker(
+        base,
+        {"model": "fake", "top_n": 2, "include_scores": True},
+        listwise_model=JinaListwiseModel({}, model=model),
+        gate_cfg={"margin_threshold": 0.1},
+    )
+    source = ColumnProfile("source", "", ())
+    candidates = [("c0", ColumnProfile("target_a", "", ())),
+                  ("c1", ColumnProfile("target_b", "", ()))]
+    stats = RuntimeStats()
+
+    scores = reranker.score(source, candidates, stats)
+
+    assert scores == pytest.approx({"c0": 0.38, "c1": 0.2})
+    assert model.calls == 0
+    assert stats.gate_evaluations == 1
+    assert stats.gate_activations == 0
+    assert stats.jina_requests == 0
+    assert reranker.last_score_details["c0"]["gate_activated"] is False
 
 
 def test_jina_no_coma_ablation_uses_only_jev_scores():
@@ -194,7 +275,9 @@ def test_registered_dema_variants_have_separate_context_and_retrieval(config):
     assert no_rerank.name == "dema_no_rerank"
     assert no_struct.name == "dema_no_struct"
     assert decision.name == "dema_decision"
+    assert type(main).__name__ == "DeMaGatedJinaMatcher"
     assert type(main.reranker).__name__ == "JinaTopReranker"
+    assert main.reranker.margin_threshold == 0.02
     assert type(no_rerank.reranker).__name__ == "FixedScoreFusionReranker"
     assert type(no_struct.reranker).__name__ == "JevJinaTopReranker"
     assert type(decision.reranker).__name__ == "DecisionReranker"

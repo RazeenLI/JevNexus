@@ -62,7 +62,7 @@ class FixedScoreFusionReranker:
         debug=None,
     ) -> dict[str, float]:
         jev_scores = self.decision.score(source, candidates, stats, debug=debug)
-        return {
+        output = {
             candidate_id: (
                 self.jev_weight * float(jev_scores[candidate_id])
                 + self.coma_plus_weight
@@ -70,6 +70,21 @@ class FixedScoreFusionReranker:
             )
             for candidate_id, profile in candidates
         }
+        fusion_order = sorted(output, key=lambda cid: -output[cid])
+        fusion_ranks = {candidate_id: rank for rank, candidate_id in enumerate(fusion_order, 1)}
+        self.last_score_details = {
+            candidate_id: {
+                "jev_score": float(jev_scores[candidate_id]),
+                "coma_plus_score": float(
+                    self.coma_scores.get((source.name, profile.name), 0.0)
+                ),
+                "fusion_score": float(output[candidate_id]),
+                "fusion_rank": fusion_ranks[candidate_id],
+                "jina_applied": False,
+            }
+            for candidate_id, profile in candidates
+        }
+        return output
 
 
 class DeMaFusionMatcher(DeMaMatcher):

@@ -104,11 +104,26 @@ def prediction_document(
     for src, items in grouped.items():
         entries = []
         for m in items:
-            entry: dict[str, Any] = {"target_column": m.target_column, "score": m.score, "rank": m.rank}
+            entry: dict[str, Any] = {
+                "target_column": m.target_column,
+                # Keep score/rank for readers of the v2 prediction schema.
+                "score": m.score,
+                "rank": m.rank,
+                "final_score": m.score,
+                "final_rank": m.rank,
+            }
             if m.reranker_score is not None:
                 entry["reranker_score"] = m.reranker_score
             if m.retrieval_score is not None:
                 entry["retrieval_score"] = m.retrieval_score
+            for field in (
+                "retrieval_rank", "jev_score", "coma_plus_score", "fusion_score",
+                "fusion_rank", "jina_applied", "jina_score", "jina_rank",
+                "gate_activated", "gate_disagreement", "gate_margin", "gate_threshold",
+            ):
+                value = getattr(m, field)
+                if value is not None:
+                    entry[field] = value
             entries.append(entry)
         predictions[src] = entries
     return {
@@ -174,20 +189,24 @@ def method_fingerprint(config: Config, method: str) -> str:
         )}
         settings["variant"] = method
         if method in (
-            "dema", "dema_no_rerank", "dema_no_struct", "dema_decision",
+            "dema", "dema_always", "dema_gate_m2", "dema_gate_m5",
+            "dema_no_rerank", "dema_no_struct", "dema_decision",
             "dema_fusion", "dema_jev_weight", "dema_jina_rerank", "dema_jina_no_coma",
             "dema_shared", "dema_single"
         ):
             settings["magneto_candidates"] = config.models["magneto"]
         if method in (
-            "dema", "dema_no_rerank", "dema_fusion", "dema_jev_weight", "dema_jina_rerank"
+            "dema", "dema_always", "dema_gate_m2", "dema_gate_m5",
+            "dema_no_rerank", "dema_fusion", "dema_jev_weight", "dema_jina_rerank"
         ):
             settings["fusion"] = config.models["fusion"]
             settings["coma_plus"] = config.models["baselines"]["coma_plus"]
         if method == "dema_jev_weight":
             settings["dynamic_weight"] = config.models["dynamic_weight"]
-        if method in ("dema", "dema_jina_rerank"):
+        if method in ("dema", "dema_always", "dema_gate_m2", "dema_gate_m5", "dema_jina_rerank"):
             settings["jina_rerank"] = config.models["jina_rerank"]
+        if method in ("dema", "dema_gate_m2", "dema_gate_m5"):
+            settings["selective_refinement"] = config.models["selective_refinement"]
         if method in ("dema_no_struct", "dema_jina_no_coma"):
             settings["jina_rerank"] = config.models["jina_rerank"]
     elif method == "magneto_qwen":

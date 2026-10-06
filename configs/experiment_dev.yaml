@@ -16,6 +16,7 @@ methods:
 - unicorn
 - magneto_qwen
 - dema
+- dema_always
 - dema_no_rerank
 - dema_no_struct
 - dema_decision

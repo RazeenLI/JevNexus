@@ -99,6 +99,7 @@ class RetrieveRerankMatcher(BaseMatcher):
             prefix = self.reranking_cfg.get("candidate_id_prefix", "c")
 
             rerank_scores: dict[str, dict[str, float]] = {}
+            rerank_details: dict[str, dict[str, dict[str, Any]]] = {}
             rerank_counts: dict[str, int] = {}
             with timed(stats, "reranking_seconds"):
                 for sp in src_profiles:
@@ -109,18 +110,24 @@ class RetrieveRerankMatcher(BaseMatcher):
                     rerank_counts[sp.name] = k
                     if k == 0:
                         rerank_scores[sp.name] = {}
+                        rerank_details[sp.name] = {}
                         continue
                     presented = present_candidates(full[sp.name][:k], tgt_by_name, position, order, prefix)
                     scores = self.reranker.score(
                         sp, [(cid, prof) for cid, _, prof in presented], stats, debug=self.debug_sink
                     )
                     rerank_scores[sp.name] = {col: scores[cid] for cid, col, _ in presented}
+                    details = getattr(self.reranker, "last_score_details", {})
+                    rerank_details[sp.name] = {
+                        col: dict(details.get(cid, {})) for cid, col, _ in presented
+                    }
 
             matches: list[Match] = []
             with timed(stats, "ranking_seconds"):
                 for sp in src_profiles:
                     matches.extend(build_final_ranking(
-                        full[sp.name], rerank_scores[sp.name], rerank_counts[sp.name]
+                        full[sp.name], rerank_scores[sp.name], rerank_counts[sp.name],
+                        rerank_details[sp.name],
                     ))
         stats.peak_gpu_memory_mb = probe.peak_mb()
         stats.finalize()

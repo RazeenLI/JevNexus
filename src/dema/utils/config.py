@@ -170,6 +170,9 @@ def validate_config(config: Config) -> None:
     jina = config.models.get("jina_rerank", {})
     if jina and int(jina.get("top_n", 3)) <= 1:
         raise ConfigError("jina_rerank.top_n must be greater than one")
+    gate = config.models.get("selective_refinement", {})
+    if float(gate.get("margin_threshold", -1)) < 0:
+        raise ConfigError("selective_refinement.margin_threshold must be non-negative")
     decision_serving = config.models.get("serving", {}).get("decision", {})
     if int(decision_serving.get("batch_size", 0)) <= 0:
         raise ConfigError("serving.decision.batch_size must be positive")

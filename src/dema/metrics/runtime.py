@@ -36,6 +36,9 @@ class RuntimeStats:
     output_tokens: int = 0
     retries: int = 0
     failures: int = 0
+    gate_evaluations: int = 0
+    gate_activations: int = 0
+    jina_requests: int = 0
     retrieval_cache_hit: bool = False
     peak_gpu_memory_mb: float | None = None
 

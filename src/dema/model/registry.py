@@ -11,17 +11,18 @@ from .retrieval import CandidateCache, CandidateRetriever
 PRIMARY_METHODS = (
     "coma", "coma_plus", "distribution", "similarity_flooding",
     "isresmat", "unicorn", "magneto_qwen",
-    "dema", "dema_no_rerank", "dema_no_struct", "dema_decision", "dema_shared",
+    "dema", "dema_always", "dema_no_rerank", "dema_no_struct", "dema_decision", "dema_shared",
 )
 OPTIONAL_METHODS = (
-    "dema_own_retrieval", "dema_jev_weight", "dema_legacy",
+    "dema_own_retrieval", "dema_jev_weight", "dema_legacy", "dema_gate_m2", "dema_gate_m5",
     # Backward-compatible aliases for result directories and old commands.
     "dema_fusion", "dema_jina_rerank", "dema_jina_no_coma", "dema_single",
     "jaccard", "levenshtein",
 )
 ALL_METHODS = PRIMARY_METHODS + OPTIONAL_METHODS
 DEMA_METHODS = (
-    "dema", "dema_no_rerank", "dema_no_struct", "dema_decision", "dema_shared",
+    "dema", "dema_always", "dema_gate_m2", "dema_gate_m5",
+    "dema_no_rerank", "dema_no_struct", "dema_decision", "dema_shared",
     "dema_own_retrieval", "dema_jev_weight", "dema_legacy",
     "dema_fusion", "dema_jina_rerank", "dema_jina_no_coma", "dema_single",
 )
@@ -62,6 +63,9 @@ def build_matcher(method: str, config: Config, use_cache: bool = True) -> BaseMa
         "levenshtein": lambda: _baseline("simple", "LevenshteinMatcher", config, cfg_name="levenshtein"),
         "magneto_qwen": lambda: _magneto(config, use_cache),
         "dema": lambda: _dema_experimental(config, use_cache, "dema"),
+        "dema_always": lambda: _dema_experimental(config, use_cache, "dema_always"),
+        "dema_gate_m2": lambda: _dema_experimental(config, use_cache, "dema_gate_m2"),
+        "dema_gate_m5": lambda: _dema_experimental(config, use_cache, "dema_gate_m5"),
         "dema_no_rerank": lambda: _dema_fusion(config, use_cache, "dema_no_rerank"),
         "dema_no_struct": lambda: _dema_experimental(config, use_cache, "dema_no_struct"),
         "dema_decision": lambda: _dema_magneto(config, use_cache, "single", "dema_decision"),
@@ -139,6 +143,7 @@ def _dema_fusion(config: Config, use_cache: bool, name: str) -> BaseMatcher:
 def _dema_experimental(config: Config, use_cache: bool, method: str) -> BaseMatcher:
     from .experimental_rerank import (
         DeMaJevWeightMatcher,
+        DeMaGatedJinaMatcher,
         DeMaJinaNoComaMatcher,
         DeMaJinaRerankMatcher,
     )
@@ -166,6 +171,17 @@ def _dema_experimental(config: Config, use_cache: bool, method: str) -> BaseMatc
             jina_cfg=config.section("jina_rerank"),
             top_k=common["top_k"],
             reranking_cfg=common["reranking_cfg"],
+        )
+    elif method in ("dema", "dema_gate_m2", "dema_gate_m5"):
+        jina_cfg = config.section("jina_rerank")
+        if method == "dema_gate_m2":
+            jina_cfg["top_n"] = 2
+        elif method == "dema_gate_m5":
+            jina_cfg["top_n"] = 5
+        matcher = DeMaGatedJinaMatcher(
+            **common,
+            jina_cfg=jina_cfg,
+            gate_cfg=config.section("selective_refinement"),
         )
     else:
         matcher = DeMaJinaRerankMatcher(**common, jina_cfg=config.section("jina_rerank"))

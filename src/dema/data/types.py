@@ -68,3 +68,15 @@ class Match:
     rank: int  # 1-based, per source column
     reranker_score: float | None = None
     retrieval_score: float | None = None
+    retrieval_rank: int | None = None
+    jev_score: float | None = None
+    coma_plus_score: float | None = None
+    fusion_score: float | None = None
+    fusion_rank: int | None = None
+    jina_applied: bool | None = None
+    jina_score: float | None = None
+    jina_rank: int | None = None
+    gate_activated: bool | None = None
+    gate_disagreement: bool | None = None
+    gate_margin: float | None = None
+    gate_threshold: float | None = None

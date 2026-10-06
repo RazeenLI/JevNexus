@@ -26,6 +26,9 @@ log = get_console_logger("dema.services")
 METHOD_SERVICE = {
     "magneto_qwen": "qwen",
     "dema": "decision",
+    "dema_always": "decision",
+    "dema_gate_m2": "decision",
+    "dema_gate_m5": "decision",
     "dema_no_rerank": "decision",
     "dema_no_struct": "decision",
     "dema_decision": "decision",
