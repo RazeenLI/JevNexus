@@ -12,8 +12,8 @@ from ..metrics.runtime import RuntimeStats
 from .contracts import RerankerFailure, RerankerOutputError
 from .decision import parse_decision_response
 from .decision import DecisionReranker
-from .dema import DeMaMatcher
-from .fusion import DeMaFusionMatcher, FixedScoreFusionReranker
+from .jevnexus import JevNexusMatcher
+from .fusion import JevNexusFusionMatcher, FixedScoreFusionReranker
 from .prompting import column_fields, describe_column
 
 
@@ -451,8 +451,8 @@ class JevJinaTopReranker:
         return output
 
 
-class DeMaJevWeightMatcher(DeMaFusionMatcher):
-    name = "dema_jev_weight"
+class JevNexusJevWeightMatcher(JevNexusFusionMatcher):
+    name = "jevnexus_jev_weight"
 
     def __init__(self, *args, dynamic_weight_cfg: dict[str, Any], **kwargs):
         super().__init__(*args, **kwargs)
@@ -463,8 +463,8 @@ class DeMaJevWeightMatcher(DeMaFusionMatcher):
         self.name = type(self).name
 
 
-class DeMaJinaRerankMatcher(DeMaFusionMatcher):
-    name = "dema_jina_rerank"
+class JevNexusJinaRerankMatcher(JevNexusFusionMatcher):
+    name = "jevnexus_jina_rerank"
 
     def __init__(self, *args, jina_cfg: dict[str, Any], listwise_model=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -479,10 +479,10 @@ class DeMaJinaRerankMatcher(DeMaFusionMatcher):
         self.fusion_reranker.load()
 
 
-class DeMaGatedJinaMatcher(DeMaFusionMatcher):
-    """Canonical DeMa: refine only low-margin Jev/COMA+ disagreements."""
+class JevNexusGatedJinaMatcher(JevNexusFusionMatcher):
+    """Canonical JevNexus: refine only low-margin Jev/COMA+ disagreements."""
 
-    name = "dema"
+    name = "jevnexus"
 
     def __init__(
         self, *args, jina_cfg: dict[str, Any], gate_cfg: dict[str, Any],
@@ -503,10 +503,10 @@ class DeMaGatedJinaMatcher(DeMaFusionMatcher):
         self.fusion_reranker.load()
 
 
-class DeMaJinaNoComaMatcher(DeMaMatcher):
+class JevNexusJinaNoComaMatcher(JevNexusMatcher):
     """Controlled ablation: Magneto candidates -> Jev-Single -> Jina Top-3."""
 
-    name = "dema_jina_no_coma"
+    name = "jevnexus_jina_no_coma"
 
     def __init__(
         self,
@@ -539,3 +539,10 @@ class DeMaJinaNoComaMatcher(DeMaMatcher):
     def load(self) -> None:
         super().load()
         self.reranker.load()
+
+
+# Import compatibility for historical experiment code.
+DeMaJevWeightMatcher = JevNexusJevWeightMatcher
+DeMaJinaRerankMatcher = JevNexusJinaRerankMatcher
+DeMaGatedJinaMatcher = JevNexusGatedJinaMatcher
+DeMaJinaNoComaMatcher = JevNexusJinaNoComaMatcher

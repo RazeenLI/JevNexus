@@ -1,8 +1,8 @@
-"""Magneto's upstream candidate generator exposed to DeMa rerankers.
+"""Magneto's upstream candidate generator exposed to JevNexus.
 
 The baseline keeps running the vendored Magneto pipeline unchanged.  This
 adapter exists for controlled reranker comparisons: ``dema_shared`` and
-DeMa and its controlled ablations receive the same cleaned data, MPNet serialization, sampling,
+JevNexus and its controlled ablations receive the same cleaned data, MPNet serialization, sampling,
 exact-name matches, threshold and per-dataset encoding used by Magneto before
 its Qwen reranker.
 """
@@ -91,7 +91,7 @@ class MagnetoCandidateRetriever:
         """Use the exact name/value fields presented by Magneto to Qwen.
 
         Magneto's LLM prompt does not contain a dtype.  The empty dtype is kept
-        only to satisfy the shared ``ColumnProfile`` type; DeMa disables dtype
+        only to satisfy the shared ``ColumnProfile`` type; JevNexus disables dtype
         rendering for these controlled variants.
         """
         self._ensure_imports()

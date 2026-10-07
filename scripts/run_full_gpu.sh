@@ -67,15 +67,15 @@ log "===== full experiment started: config=$EXPERIMENT_CONFIG ====="
 
 # Most important claims first.  Separate invocations ensure a fatal process
 # exit in one task cannot prevent the next task from starting.
-run_task 01_dema run_methods dema dema_always
+run_task 01_jevnexus run_methods jevnexus jevnexus_always
 run_task 02_magneto_qwen run_methods magneto_qwen
 run_task 03_coma_plus run_methods coma_plus
 run_task 04_unicorn run_methods unicorn
 run_task 05_isresmat run_methods isresmat
 
 # Core component ablations share one Open-Jev service lifecycle.
-run_task 06_dema_ablations run_methods \
-    dema_no_rerank dema_no_struct dema_decision
+run_task 06_jevnexus_ablations run_methods \
+    jevnexus_no_rerank jevnexus_no_struct jevnexus_decision
 
 # Secondary traditional baselines. Distribution is last because it is the
 # least reliable/most resource-sensitive and is isolated one case at a time.
@@ -89,8 +89,8 @@ run_task 10_evaluate \
     "$PYTHON" -m dema.metrics.evaluator \
     --config "$EXPERIMENT_CONFIG" \
     --methods \
-    dema dema_always magneto_qwen coma_plus unicorn isresmat \
-    dema_no_rerank dema_no_struct dema_decision \
+    jevnexus jevnexus_always magneto_qwen coma_plus unicorn isresmat \
+    jevnexus_no_rerank jevnexus_no_struct jevnexus_decision \
     coma similarity_flooding distribution
 
 log "===== full experiment finished: $TASK_NO tasks, $N_FAILED failed; see $FAILURES ====="

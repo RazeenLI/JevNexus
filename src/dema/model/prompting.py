@@ -1,6 +1,6 @@
 """Shared, model-agnostic presentation of source/candidate columns.
 
-Both rerankers use these helpers, so the generative (Qwen) and decision (DeMa)
+Both rerankers use these helpers, so the generative (Qwen) and decision (JevNexus)
 models receive exactly the same semantic information: column name, type and
 sampled values. Retrieval scores/ranks and ground truth are never included.
 """

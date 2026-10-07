@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Minimal end-to-end test on one GDC case and one Valentine case with one
-# traditional baseline, magneto_qwen and the primary dema_shared variant.
+# traditional baseline, magneto_qwen and the primary jevnexus_shared variant.
 # Requires both model servers.
 # Verifies loading, representation, retrieval, Qwen call, decision call,
 # ranking, prediction/runtime writing and evaluation. Exits non-zero on failure.

@@ -1,7 +1,7 @@
 """magneto_qwen: the original Magneto code with its LLM swapped to Qwen3.5-9B.
 
 Runs ``Magneto(...).get_matches`` from the vendored upstream package in
-``vendor/magneto`` (see PATCHES.md); DeMa only converts its output to the
+``vendor/magneto`` (see PATCHES.md); JevNexus only converts its output to the
 shared complete-ranking format. Magneto returns its top-k (20) targets per
 source column; the remaining targets are appended after them in target-schema
 order. Magneto's own behaviour is kept, including its fallback to the retrieval

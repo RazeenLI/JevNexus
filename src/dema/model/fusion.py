@@ -1,4 +1,4 @@
-"""Fixed, training-free fusion of Jev and COMA++ scores for DeMa−R."""
+"""Fixed, training-free fusion of Jev and COMA++ scores for JevNexus."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from ..baselines.coma_plus import COMAPlusMatcher
 from ..data.types import ColumnProfile, Match
 from ..metrics.runtime import RuntimeStats
 from .decision import DecisionReranker
-from .dema import DeMaMatcher
+from .jevnexus import JevNexusMatcher
 
 
 class FixedScoreFusionReranker:
@@ -87,10 +87,10 @@ class FixedScoreFusionReranker:
         return output
 
 
-class DeMaFusionMatcher(DeMaMatcher):
+class JevNexusFusionMatcher(JevNexusMatcher):
     """Magneto candidates ranked by fixed Jev + COMA++ score fusion."""
 
-    name = "dema_fusion"
+    name = "jevnexus_fusion"
 
     def __init__(
         self,
@@ -140,3 +140,7 @@ class DeMaFusionMatcher(DeMaMatcher):
         self.last_runtime.matching_seconds += coma_seconds
         self.last_runtime.finalize()
         return matches
+
+
+# Import compatibility for the former method name.
+DeMaFusionMatcher = JevNexusFusionMatcher

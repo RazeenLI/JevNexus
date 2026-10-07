@@ -15,12 +15,12 @@ methods:
 - isresmat
 - unicorn
 - magneto_qwen
-- dema
-- dema_always
-- dema_no_rerank
-- dema_no_struct
-- dema_decision
-- dema_shared
+- jevnexus
+- jevnexus_always
+- jevnexus_no_rerank
+- jevnexus_no_struct
+- jevnexus_decision
+- jevnexus_shared
 resume: true
 save_full_rankings: true
 save_runtime: true
@@ -35,5 +35,5 @@ smoke_test:
   methods:
   - coma
   - magneto_qwen
-  - dema
+  - jevnexus
 max_cases_per_dataset: 5

@@ -1,8 +1,8 @@
-"""Decision-model reranking (DeMa).
+"""Typed correspondence decisions for JevNexus.
 
 Each candidate receives an *independent binary* judgment
 ``p_i = P(T_i matches S)`` — one ``noul`` (yes/no) question per candidate, not a
-single multiclass choice. The backend abstraction keeps DeMa independent of a
+single multiclass choice. The backend abstraction keeps JevNexus independent of a
 specific provider/checkpoint; the default ``system_one`` backend speaks the
 System One HTTP protocol (Jev / Open-Jev ``POST /v1/systemone``)::
 

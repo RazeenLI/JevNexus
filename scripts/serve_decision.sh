@@ -4,7 +4,7 @@
 # Default model: Open-Jev-9B (ZefanCai/Open-Jev-9B) — LoRA adapter + scalar
 # decision head over the pinned Qwen/Qwen3.5-9B revision — served by the
 # Open-Jev reference server (`python -m jev.server`). Only the model server is
-# started; no experiments run here. DeMa talks to it purely over HTTP.
+# started; no experiments run here. JevNexus talks to it purely over HTTP.
 #
 # Requirements for DECISION_PYTHON (default: airdb python):
 #   * the `jev` package (Open-Jev, https://github.com/Zefan-Cai/Open-Jev) and `peft`

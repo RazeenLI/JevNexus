@@ -2,7 +2,7 @@
 # Run one experiment "lane" pinned to one GPU; two lanes together cover everything.
 #
 #   bash scripts/run_lane.sh qwen 0        # GPU0: baselines + Qwen server + magneto_qwen
-#   bash scripts/run_lane.sh decision 1    # GPU1: decision server + dema, then ISResMat
+#   bash scripts/run_lane.sh decision 1    # GPU1: decision server + JevNexus, then ISResMat
 #
 # Every task runs to completion even if an earlier one failed. Failed tasks are
 # appended to logs/lanes/<lane>/failures.tsv (case-level state is in saves/status
@@ -154,21 +154,21 @@ case "$LANE" in
         fi
         ;;
     decision)
-        if start_server scripts/serve_decision.sh dema; then
-            run_task dema runner dema
-            run_task dema_no_rerank runner dema_no_rerank
-            run_task dema_no_struct runner dema_no_struct
-            run_task dema_decision runner dema_decision
-            run_task dema_shared runner dema_shared
-            run_task scalability_dema_shared scal dema_shared
+        if start_server scripts/serve_decision.sh jevnexus; then
+            run_task jevnexus runner jevnexus
+            run_task jevnexus_no_rerank runner jevnexus_no_rerank
+            run_task jevnexus_no_struct runner jevnexus_no_struct
+            run_task jevnexus_decision runner jevnexus_decision
+            run_task jevnexus_shared runner jevnexus_shared
+            run_task scalability_jevnexus_shared scal jevnexus_shared
             stop_server
         else
-            skip_task dema "decision server did not start"
-            skip_task dema_no_rerank "decision server did not start"
-            skip_task dema_no_struct "decision server did not start"
-            skip_task dema_decision "decision server did not start"
-            skip_task dema_shared "decision server did not start"
-            skip_task scalability_dema_shared "decision server did not start"
+            skip_task jevnexus "decision server did not start"
+            skip_task jevnexus_no_rerank "decision server did not start"
+            skip_task jevnexus_no_struct "decision server did not start"
+            skip_task jevnexus_decision "decision server did not start"
+            skip_task jevnexus_shared "decision server did not start"
+            skip_task scalability_jevnexus_shared "decision server did not start"
         fi
         run_task baseline_isresmat runner isresmat
         run_task scalability_isresmat scal isresmat

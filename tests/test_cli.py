@@ -21,6 +21,9 @@ class NameMatcher(BaseMatcher):
 
 def test_method_service_mapping():
     assert required_service("magneto_qwen") == "qwen"
+    assert required_service("jevnexus") == "decision"
+    assert required_service("jevnexus_no_rerank") == "decision"
+    assert required_service("jevnexus_shared") == "decision"
     assert required_service("dema_fusion") == "decision"
     assert required_service("dema_no_rerank") == "decision"
     assert required_service("dema_no_struct") == "decision"

@@ -9,15 +9,15 @@ datasets:
   - WikiData
 
 methods:
-  - dema
-  - dema_always
+  - jevnexus
+  - jevnexus_always
   - magneto_qwen
   - coma_plus
   - unicorn
   - isresmat
-  - dema_no_rerank
-  - dema_no_struct
-  - dema_decision
+  - jevnexus_no_rerank
+  - jevnexus_no_struct
+  - jevnexus_decision
   - coma
   - similarity_flooding
   - distribution
@@ -41,4 +41,4 @@ smoke_test:
   methods:
     - coma
     - magneto_qwen
-    - dema
+    - jevnexus

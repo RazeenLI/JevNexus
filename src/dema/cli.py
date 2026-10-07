@@ -1,4 +1,4 @@
-"""Simple top-level command line interface for DeMa experiments."""
+"""Top-level command line interface for JevNexus experiments."""
 
 from __future__ import annotations
 
@@ -243,7 +243,7 @@ def run_experiment(args: argparse.Namespace) -> int:
         service = required_service(method)
 
         # Consecutive methods using one model endpoint share a single server
-        # lifecycle.  In particular, all DeMa variants load Open-Jev only once.
+        # lifecycle. In particular, all JevNexus variants load Open-Jev only once.
         group = [method]
         if service:
             while index + len(group) < len(methods):
@@ -326,7 +326,7 @@ def run_experiment(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m dema",
-        description="Run DeMa experiments from one command; required model services are managed automatically.",
+        description="Run JevNexus experiments; required model services are managed automatically.",
     )
     sub = parser.add_subparsers(dest="command", required=True)
     run = sub.add_parser("run", help="run methods and write metrics")

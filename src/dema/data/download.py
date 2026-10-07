@@ -36,7 +36,7 @@ from ..utils.logging import get_console_logger
 
 log = get_console_logger("dema.download")
 
-USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) DeMa-benchmark-downloader"
+USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) JevNexus-benchmark-downloader"
 
 
 def _download(url: str, dest: Path, timeout: int = 600, attempts: int = 3) -> None:

@@ -1,6 +1,6 @@
 """Generic experiment runner.
 
-    python -m dema.experiments.runner --method dema --dataset GDC
+    python -m dema.experiments.runner --method jevnexus --dataset GDC
     python -m dema.experiments.runner --method coma --dataset OpenData --case-id <id> --overwrite
 
 The atomic execution unit is ``method x dataset x case``. For each unit the
@@ -40,7 +40,7 @@ from ..data.manifest import CaseRecord, read_manifest, select_cases, spread_per_
 from ..data.types import Match
 from ..model.base import BaseMatcher, CaseContext
 from ..model.ranking import group_by_source, validate_ranking
-from ..model.registry import ALL_METHODS, DEMA_METHODS, build_matcher
+from ..model.registry import ALL_METHODS, DEMA_METHODS, LEGACY_METHOD_ALIASES, build_matcher
 from ..model.representation.serialization import representation_signature
 from ..utils.config import Config, load_config
 from ..utils.device import set_global_seed
@@ -183,31 +183,32 @@ def unit_state(
 
 def method_fingerprint(config: Config, method: str) -> str:
     """Hash semantic settings so resume never reuses results from old configs."""
+    variant = LEGACY_METHOD_ALIASES.get(method, method)
     if method in DEMA_METHODS:
         settings = {name: config.models[name] for name in (
             "representation", "retriever", "reranking", "decision"
         )}
-        settings["variant"] = method
-        if method in (
+        settings["variant"] = variant
+        if variant in (
             "dema", "dema_always", "dema_gate_m2", "dema_gate_m5",
             "dema_no_rerank", "dema_no_struct", "dema_decision",
             "dema_fusion", "dema_jev_weight", "dema_jina_rerank", "dema_jina_no_coma",
             "dema_shared", "dema_single"
         ):
             settings["magneto_candidates"] = config.models["magneto"]
-        if method in (
+        if variant in (
             "dema", "dema_always", "dema_gate_m2", "dema_gate_m5",
             "dema_no_rerank", "dema_fusion", "dema_jev_weight", "dema_jina_rerank"
         ):
             settings["fusion"] = config.models["fusion"]
             settings["coma_plus"] = config.models["baselines"]["coma_plus"]
-        if method == "dema_jev_weight":
+        if variant == "dema_jev_weight":
             settings["dynamic_weight"] = config.models["dynamic_weight"]
-        if method in ("dema", "dema_always", "dema_gate_m2", "dema_gate_m5", "dema_jina_rerank"):
+        if variant in ("dema", "dema_always", "dema_gate_m2", "dema_gate_m5", "dema_jina_rerank"):
             settings["jina_rerank"] = config.models["jina_rerank"]
-        if method in ("dema", "dema_gate_m2", "dema_gate_m5"):
+        if variant in ("dema", "dema_gate_m2", "dema_gate_m5"):
             settings["selective_refinement"] = config.models["selective_refinement"]
-        if method in ("dema_no_struct", "dema_jina_no_coma"):
+        if variant in ("dema_no_struct", "dema_jina_no_coma"):
             settings["jina_rerank"] = config.models["jina_rerank"]
     elif method == "magneto_qwen":
         settings = {name: config.models[name] for name in ("magneto", "qwen")}

@@ -1,4 +1,4 @@
-"""Generate no-inference diagnostics used by the DeMa paper.
+"""Generate no-inference diagnostics used by the JevNexus paper.
 
 Outputs candidate localization, gate routing, and paired bootstrap comparisons
 from completed prediction artifacts. Missing method/case units are reported both
@@ -199,7 +199,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default="configs/experiment.yaml")
     parser.add_argument("--dev-config", default="configs/experiment_dev.yaml")
-    parser.add_argument("--method", default="dema")
+    parser.add_argument("--method", default="jevnexus")
     parser.add_argument("--compare", default="magneto_qwen")
     parser.add_argument("--datasets", nargs="+", default=None)
     parser.add_argument("--bootstrap-samples", type=int, default=10000)

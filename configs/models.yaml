@@ -18,7 +18,7 @@ retriever:
   device: auto           # auto | cpu | cuda | cuda:N
   normalize: true
 
-# Default presentation for the legacy DeMa retriever. Canonical DeMa methods
+# Default presentation for the legacy retriever. Canonical JevNexus methods
 # override this to retrieval order so they preserve Magneto's candidate signal.
 reranking:
   # Candidates are presented (and given ids c0..c{k-1}) in target-schema column
@@ -26,7 +26,7 @@ reranking:
   candidate_order: target_schema
   candidate_id_prefix: c
 
-# Fixed fusion used by DeMa and DeMa−R. COMA++-unselected pairs receive zero.
+# Fixed fusion used by JevNexus and its no-refinement ablation.
 fusion:
   jev_weight: 0.4
   coma_plus_weight: 0.6
@@ -39,7 +39,7 @@ dynamic_weight:
   max_jev_weight: 0.7
   evidence_top_n: 5
 
-# Listwise stage used by DeMa and DeMa−S.
+# Listwise stage used by JevNexus and its no-complement ablation.
 jina_rerank:
   model: jinaai/jina-reranker-v3.5
   revision: e8a93f33f0b22108f8c2364f8484ce3422552fbc
@@ -48,7 +48,7 @@ jina_rerank:
   top_n: 3
   include_scores: true
 
-# Canonical DeMa invokes the listwise refiner only when the independently
+# Canonical JevNexus invokes the listwise refiner only when the independently
 # scored Jev and COMA+ top choices disagree and the fused top-two margin is low.
 selective_refinement:
   margin_threshold: 0.02
@@ -77,9 +77,9 @@ decision:
   request_model: null     # value of the request "model" field (null = omit; the server uses its loaded model)
   timeout: 300
   max_retries: 3
-  # Default for the backward-compatible ``dema`` alias.  Registered experiment
-  # Variants override this explicitly: dema/dema_no_*=single,
-  # dema_shared=shared, and legacy own-retrieval diagnostics retain their setup.
+  # Default for JevNexus and its backward-compatible ``dema`` alias. Registered
+  # variants override this explicitly; historical ``dema*`` IDs retain the same
+  # behavior for reproducibility.
   # How candidate information is laid out in the System One request:
   #   shared: state = source column + all candidates; one noul question per candidate id
   #   single: state = source column; each question carries its own candidate description

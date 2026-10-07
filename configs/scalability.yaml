@@ -9,7 +9,7 @@ methods:
   - isresmat
   - unicorn
   - magneto_qwen
-  - dema_shared
+  - jevnexus_shared
 
 target_sizes:
   - 50

@@ -11,22 +11,39 @@ from .retrieval import CandidateCache, CandidateRetriever
 PRIMARY_METHODS = (
     "coma", "coma_plus", "distribution", "similarity_flooding",
     "isresmat", "unicorn", "magneto_qwen",
-    "dema", "dema_always", "dema_no_rerank", "dema_no_struct", "dema_decision", "dema_shared",
+    "jevnexus", "jevnexus_always", "jevnexus_no_rerank", "jevnexus_no_struct",
+    "jevnexus_decision", "jevnexus_shared",
 )
 OPTIONAL_METHODS = (
+    "jevnexus_own_retrieval", "jevnexus_jev_weight", "jevnexus_legacy",
+    "jevnexus_gate_m2", "jevnexus_gate_m5",
+    "jevnexus_fusion", "jevnexus_jina_rerank", "jevnexus_jina_no_coma", "jevnexus_single",
+    # Legacy DeMa identifiers remain valid for historical outputs and commands.
+    "dema", "dema_always", "dema_no_rerank", "dema_no_struct", "dema_decision", "dema_shared",
     "dema_own_retrieval", "dema_jev_weight", "dema_legacy", "dema_gate_m2", "dema_gate_m5",
-    # Backward-compatible aliases for result directories and old commands.
     "dema_fusion", "dema_jina_rerank", "dema_jina_no_coma", "dema_single",
     "jaccard", "levenshtein",
 )
 ALL_METHODS = PRIMARY_METHODS + OPTIONAL_METHODS
-DEMA_METHODS = (
+JEVNEXUS_METHODS = (
+    "jevnexus", "jevnexus_always", "jevnexus_gate_m2", "jevnexus_gate_m5",
+    "jevnexus_no_rerank", "jevnexus_no_struct", "jevnexus_decision", "jevnexus_shared",
+    "jevnexus_own_retrieval", "jevnexus_jev_weight", "jevnexus_legacy",
+    "jevnexus_fusion", "jevnexus_jina_rerank", "jevnexus_jina_no_coma", "jevnexus_single",
+)
+LEGACY_DEMA_METHODS = (
     "dema", "dema_always", "dema_gate_m2", "dema_gate_m5",
     "dema_no_rerank", "dema_no_struct", "dema_decision", "dema_shared",
     "dema_own_retrieval", "dema_jev_weight", "dema_legacy",
     "dema_fusion", "dema_jina_rerank", "dema_jina_no_coma", "dema_single",
 )
+# Kept as an import-compatible family constant for existing callers.
+DEMA_METHODS = JEVNEXUS_METHODS + LEGACY_DEMA_METHODS
 CACHED_RETRIEVAL_METHODS = DEMA_METHODS
+
+LEGACY_METHOD_ALIASES = {
+    method: method.replace("jevnexus", "dema", 1) for method in JEVNEXUS_METHODS
+}
 
 
 def candidate_cache(config: Config, enabled: bool = True) -> CandidateCache:
@@ -52,6 +69,7 @@ def make_magneto_retriever(config: Config, use_cache: bool = True):
 
 
 def build_matcher(method: str, config: Config, use_cache: bool = True) -> BaseMatcher:
+    builder_method = LEGACY_METHOD_ALIASES.get(method, method)
     builders: dict[str, Callable[[], BaseMatcher]] = {
         "coma": lambda: _baseline("coma", "COMAMatcher", config),
         "coma_plus": lambda: _baseline("coma_plus", "COMAPlusMatcher", config),
@@ -62,25 +80,27 @@ def build_matcher(method: str, config: Config, use_cache: bool = True) -> BaseMa
         "jaccard": lambda: _baseline("simple", "JaccardMatcher", config, cfg_name="jaccard"),
         "levenshtein": lambda: _baseline("simple", "LevenshteinMatcher", config, cfg_name="levenshtein"),
         "magneto_qwen": lambda: _magneto(config, use_cache),
-        "dema": lambda: _dema_experimental(config, use_cache, "dema"),
-        "dema_always": lambda: _dema_experimental(config, use_cache, "dema_always"),
-        "dema_gate_m2": lambda: _dema_experimental(config, use_cache, "dema_gate_m2"),
-        "dema_gate_m5": lambda: _dema_experimental(config, use_cache, "dema_gate_m5"),
-        "dema_no_rerank": lambda: _dema_fusion(config, use_cache, "dema_no_rerank"),
-        "dema_no_struct": lambda: _dema_experimental(config, use_cache, "dema_no_struct"),
-        "dema_decision": lambda: _dema_magneto(config, use_cache, "single", "dema_decision"),
-        "dema_jev_weight": lambda: _dema_experimental(config, use_cache, "dema_jev_weight"),
-        "dema_jina_rerank": lambda: _dema_experimental(config, use_cache, "dema_jina_rerank"),
-        "dema_jina_no_coma": lambda: _dema_experimental(config, use_cache, "dema_jina_no_coma"),
-        "dema_fusion": lambda: _dema_fusion(config, use_cache, "dema_fusion"),
-        "dema_shared": lambda: _dema_magneto(config, use_cache, "shared", "dema_shared"),
-        "dema_single": lambda: _dema_magneto(config, use_cache, "single", "dema_single"),
-        "dema_own_retrieval": lambda: _dema_own(config, use_cache, "shared", "dema_own_retrieval"),
-        "dema_legacy": lambda: _dema_own(config, use_cache, "single", "dema_legacy"),
+        "dema": lambda: _jevnexus_experimental(config, use_cache, "dema"),
+        "dema_always": lambda: _jevnexus_experimental(config, use_cache, "dema_always"),
+        "dema_gate_m2": lambda: _jevnexus_experimental(config, use_cache, "dema_gate_m2"),
+        "dema_gate_m5": lambda: _jevnexus_experimental(config, use_cache, "dema_gate_m5"),
+        "dema_no_rerank": lambda: _jevnexus_fusion(config, use_cache, "dema_no_rerank"),
+        "dema_no_struct": lambda: _jevnexus_experimental(config, use_cache, "dema_no_struct"),
+        "dema_decision": lambda: _jevnexus_magneto(config, use_cache, "single", "dema_decision"),
+        "dema_jev_weight": lambda: _jevnexus_experimental(config, use_cache, "dema_jev_weight"),
+        "dema_jina_rerank": lambda: _jevnexus_experimental(config, use_cache, "dema_jina_rerank"),
+        "dema_jina_no_coma": lambda: _jevnexus_experimental(config, use_cache, "dema_jina_no_coma"),
+        "dema_fusion": lambda: _jevnexus_fusion(config, use_cache, "dema_fusion"),
+        "dema_shared": lambda: _jevnexus_magneto(config, use_cache, "shared", "dema_shared"),
+        "dema_single": lambda: _jevnexus_magneto(config, use_cache, "single", "dema_single"),
+        "dema_own_retrieval": lambda: _jevnexus_own(config, use_cache, "shared", "dema_own_retrieval"),
+        "dema_legacy": lambda: _jevnexus_own(config, use_cache, "single", "dema_legacy"),
     }
-    if method not in builders:
-        raise ValueError(f"unknown method {method!r}; available: {sorted(builders)}")
-    return builders[method]()
+    if builder_method not in builders:
+        raise ValueError(f"unknown method {method!r}; available: {sorted(ALL_METHODS)}")
+    matcher = builders[builder_method]()
+    matcher.name = method
+    return matcher
 
 
 def _baseline(module: str, cls: str, config: Config, cfg_name: str | None = None) -> BaseMatcher:
@@ -97,37 +117,37 @@ def _magneto(config: Config, use_cache: bool) -> BaseMatcher:
     return MagnetoOriginalMatcher(config.section("magneto"), config.section("qwen"))
 
 
-def _dema_own(config: Config, use_cache: bool, context: str, name: str) -> BaseMatcher:
-    from .dema import DeMaMatcher
+def _jevnexus_own(config: Config, use_cache: bool, context: str, name: str) -> BaseMatcher:
+    from .jevnexus import JevNexusMatcher
 
-    return DeMaMatcher(
+    return JevNexusMatcher(
         config.section("representation"), make_retriever(config, use_cache), config.section("decision"),
         top_k=config.section("retriever")["top_k"], reranking_cfg=config.section("reranking"),
         candidate_context=context, name=name,
     )
 
 
-def _dema_magneto(config: Config, use_cache: bool, context: str, name: str) -> BaseMatcher:
-    from .dema import DeMaMatcher
+def _jevnexus_magneto(config: Config, use_cache: bool, context: str, name: str) -> BaseMatcher:
+    from .jevnexus import JevNexusMatcher
 
     reranking_cfg = dict(config.section("reranking"))
     # Magneto presents candidates in retrieval order; preserve the same signal
     # for the controlled Jev comparison.
     reranking_cfg["candidate_order"] = "retrieval"
     retriever = make_magneto_retriever(config, use_cache)
-    return DeMaMatcher(
+    return JevNexusMatcher(
         config.section("representation"), retriever, config.section("decision"),
         top_k=config.section("retriever")["top_k"], reranking_cfg=reranking_cfg,
         candidate_context=context, include_dtype=False, name=name,
     )
 
 
-def _dema_fusion(config: Config, use_cache: bool, name: str) -> BaseMatcher:
-    from .fusion import DeMaFusionMatcher
+def _jevnexus_fusion(config: Config, use_cache: bool, name: str) -> BaseMatcher:
+    from .fusion import JevNexusFusionMatcher
 
     reranking_cfg = dict(config.section("reranking"))
     reranking_cfg["candidate_order"] = "retrieval"
-    matcher = DeMaFusionMatcher(
+    matcher = JevNexusFusionMatcher(
         config.section("representation"),
         make_magneto_retriever(config, use_cache),
         config.section("decision"),
@@ -140,12 +160,12 @@ def _dema_fusion(config: Config, use_cache: bool, name: str) -> BaseMatcher:
     return matcher
 
 
-def _dema_experimental(config: Config, use_cache: bool, method: str) -> BaseMatcher:
+def _jevnexus_experimental(config: Config, use_cache: bool, method: str) -> BaseMatcher:
     from .experimental_rerank import (
-        DeMaJevWeightMatcher,
-        DeMaGatedJinaMatcher,
-        DeMaJinaNoComaMatcher,
-        DeMaJinaRerankMatcher,
+        JevNexusJevWeightMatcher,
+        JevNexusGatedJinaMatcher,
+        JevNexusJinaNoComaMatcher,
+        JevNexusJinaRerankMatcher,
     )
 
     reranking_cfg = dict(config.section("reranking"))
@@ -160,11 +180,11 @@ def _dema_experimental(config: Config, use_cache: bool, method: str) -> BaseMatc
         reranking_cfg=reranking_cfg,
     )
     if method == "dema_jev_weight":
-        return DeMaJevWeightMatcher(
+        return JevNexusJevWeightMatcher(
             **common, dynamic_weight_cfg=config.section("dynamic_weight")
         )
     if method in ("dema_no_struct", "dema_jina_no_coma"):
-        matcher = DeMaJinaNoComaMatcher(
+        matcher = JevNexusJinaNoComaMatcher(
             representation_cfg=common["representation_cfg"],
             retriever=common["retriever"],
             decision_cfg=common["decision_cfg"],
@@ -178,12 +198,12 @@ def _dema_experimental(config: Config, use_cache: bool, method: str) -> BaseMatc
             jina_cfg["top_n"] = 2
         elif method == "dema_gate_m5":
             jina_cfg["top_n"] = 5
-        matcher = DeMaGatedJinaMatcher(
+        matcher = JevNexusGatedJinaMatcher(
             **common,
             jina_cfg=jina_cfg,
             gate_cfg=config.section("selective_refinement"),
         )
     else:
-        matcher = DeMaJinaRerankMatcher(**common, jina_cfg=config.section("jina_rerank"))
+        matcher = JevNexusJinaRerankMatcher(**common, jina_cfg=config.section("jina_rerank"))
     matcher.name = method
     return matcher

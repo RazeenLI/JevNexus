@@ -5,7 +5,7 @@
 Checks: configuration valid, processed benchmark + manifest present, output
 directory writable, Qwen endpoint answers a real scoring request (if
 ``magneto_qwen`` is selected) and the decision endpoint answers a real
-System One request (if any DeMa variant is selected). Exits non-zero on any
+System One request (if any JevNexus variant is selected). Exits non-zero on any
 failure.
 """
 

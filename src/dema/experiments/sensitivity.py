@@ -1,4 +1,4 @@
-"""Offline alpha/tau sensitivity from one ``dema_always`` run.
+"""Offline alpha/tau sensitivity from one ``jevnexus_always`` run.
 
 The Always-Jina artifact stores Jev, COMA+, fixed-fusion and Jina ranks for
 every retrieved candidate. Alpha therefore changes only the no-refinement
@@ -31,7 +31,7 @@ def _candidate_entries(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
     candidates = [entry for entry in entries if entry.get("jev_score") is not None]
     if not candidates:
         raise ValueError(
-            "prediction has no component scores; run method 'dema_always' with the current code"
+            "prediction has no component scores; run method 'jevnexus_always' with the current code"
         )
     return sorted(candidates, key=lambda entry: int(entry["retrieval_rank"]))
 
@@ -200,7 +200,10 @@ def write_m_summary(config_path: str, methods: list[str], output_dir: Path | Non
     """Summarize online m=2/3/5 runs over the configured development split."""
     config = load_config(config_path)
     tables = evaluate(config, methods, list(config.experiment["datasets"]))
-    mapping = {"dema_gate_m2": 2, "dema": 3, "dema_gate_m5": 5}
+    mapping = {
+        "jevnexus_gate_m2": 2, "jevnexus": 3, "jevnexus_gate_m5": 5,
+        "dema_gate_m2": 2, "dema": 3, "dema_gate_m5": 5,
+    }
     frames = []
     for table_name in ("per_dataset", "overall"):
         frame = tables[table_name].copy()
@@ -219,14 +222,14 @@ def write_m_summary(config_path: str, methods: list[str], output_dir: Path | Non
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default="configs/experiment_dev.yaml")
-    parser.add_argument("--source-method", default="dema_always")
+    parser.add_argument("--source-method", default="jevnexus_always")
     parser.add_argument("--datasets", nargs="+", default=None)
     parser.add_argument("--alphas", nargs="+", type=float, default=[0, 0.2, 0.4, 0.6, 0.8, 1])
     parser.add_argument("--taus", nargs="+", type=float, default=[0.005, 0.01, 0.02, 0.05, 0.1])
     parser.add_argument("--output-dir", type=Path, default=None)
     parser.add_argument(
         "--m-methods", nargs="+", default=None,
-        help="also summarize completed online m runs (normally dema_gate_m2 dema dema_gate_m5)",
+        help="also summarize completed online m runs (normally jevnexus_gate_m2 jevnexus jevnexus_gate_m5)",
     )
     args = parser.parse_args(argv)
     if any(not 0 <= alpha <= 1 for alpha in args.alphas):

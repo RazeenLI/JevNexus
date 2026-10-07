@@ -4,6 +4,22 @@ __pycache__/
 .pytest_cache/
 .venv/
 
+# Local environment, credentials, editor, and agent state.
+.env
+.env.*
+!.env.example
+.aws/
+.codex/
+.agents/
+.idea/
+.vscode/
+.DS_Store
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+
 # Benchmark data is downloaded/derived, never committed.
 data/raw/*
 data/processed/*
@@ -27,3 +43,4 @@ metrics/*
 !metrics/.gitkeep
 
 Writing/
+WRITING_PACKAGE.md

@@ -1,4 +1,4 @@
-"""DeMa integration and the upstream-Magneto adapter."""
+"""JevNexus integration and the upstream-Magneto adapter."""
 
 import pytest
 
@@ -258,7 +258,9 @@ def test_dema_uses_single_candidate_questions(mini_benchmark, fake_servers):
             assert "retrieval" not in question["instructions"]
 
 
-def test_registered_dema_variants_have_separate_context_and_retrieval(config):
+def test_registered_jevnexus_variants_and_legacy_aliases(config):
+    canonical = build_matcher("jevnexus", config)
+    canonical_no_rerank = build_matcher("jevnexus_no_rerank", config)
     main = build_matcher("dema", config)
     no_rerank = build_matcher("dema_no_rerank", config)
     no_struct = build_matcher("dema_no_struct", config)
@@ -271,11 +273,15 @@ def test_registered_dema_variants_have_separate_context_and_retrieval(config):
     single = build_matcher("dema_single", config)
     own = build_matcher("dema_own_retrieval", config)
 
+    assert canonical.name == "jevnexus"
+    assert canonical_no_rerank.name == "jevnexus_no_rerank"
+    assert type(canonical).__name__ == "JevNexusGatedJinaMatcher"
+    assert type(canonical_no_rerank.reranker).__name__ == "FixedScoreFusionReranker"
     assert main.name == "dema"
     assert no_rerank.name == "dema_no_rerank"
     assert no_struct.name == "dema_no_struct"
     assert decision.name == "dema_decision"
-    assert type(main).__name__ == "DeMaGatedJinaMatcher"
+    assert type(main).__name__ == "JevNexusGatedJinaMatcher"
     assert type(main.reranker).__name__ == "JinaTopReranker"
     assert main.reranker.margin_threshold == 0.02
     assert type(no_rerank.reranker).__name__ == "FixedScoreFusionReranker"

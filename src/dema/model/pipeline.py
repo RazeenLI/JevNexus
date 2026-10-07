@@ -1,4 +1,4 @@
-"""DeMa's retrieve-and-rerank pipeline.
+"""JevNexus retrieval and decision pipeline.
 
     column representation -> candidate retrieval -> reranker scoring -> complete ranking
 

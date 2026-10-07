@@ -2,12 +2,12 @@
 
     python -m dema.experiments.precompute [--scalability configs/scalability.yaml]
 
-DeMa may run concurrently with other experiments. Computing every DeMa
+JevNexus may run concurrently with other experiments. Computing every JevNexus
 candidate ordering once, up front, keeps embedding work out of the measured
-reranking run. Both DeMa's original retriever and the controlled variants'
+reranking run. Both the legacy retriever and the controlled variants'
 Magneto candidate generator have separate caches. The untouched Magneto-Qwen
 baseline still owns its upstream pipeline and does not use either cache. Uses
-exactly the cache keys of DeMa:
+exactly the cache keys of JevNexus:
 formal cases (dataset, case_id) and, optionally, the scalability units
 (dataset, ``<case_id>__t<size>_r<rep>``) of the reranking methods. Idempotent:
 existing entries are cache hits.
@@ -20,7 +20,7 @@ import sys
 
 from ..data.loader import load_case
 from ..data.manifest import read_manifest, select_cases
-from ..model.registry import make_magneto_retriever, make_retriever
+from ..model.registry import LEGACY_METHOD_ALIASES, make_magneto_retriever, make_retriever
 from ..model.representation.profile import profile_table
 from .scalability import scalability_records, unit_plan
 from ..utils.config import load_config, load_yaml, resolve_path
@@ -52,7 +52,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         return magneto_retriever.last_cache_hit
 
-    methods = set(config.experiment["methods"])
+    methods = {LEGACY_METHOD_ALIASES.get(method, method) for method in config.experiment["methods"]}
     fills = []
     if methods & {
         "dema", "dema_no_rerank", "dema_no_struct", "dema_decision",
@@ -72,7 +72,9 @@ def main(argv: list[str] | None = None) -> int:
                 hits, computed = hits + hit, computed + (not hit)
     if args.scalability:
         scfg = load_yaml(resolve_path(args.scalability))
-        scalability_methods = set(scfg["methods"])
+        scalability_methods = {
+            LEGACY_METHOD_ALIASES.get(method, method) for method in scfg["methods"]
+        }
         scalability_fills = []
         if scalability_methods & {
             "dema", "dema_no_rerank", "dema_no_struct", "dema_decision",

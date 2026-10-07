@@ -19,6 +19,7 @@ from urllib.parse import urlparse
 
 from ..utils.config import REPO_ROOT, Config
 from ..utils.logging import get_console_logger
+from ..model.registry import LEGACY_METHOD_ALIASES
 from .preflight import check_decision, check_qwen
 
 log = get_console_logger("dema.services")
@@ -45,7 +46,7 @@ METHOD_SERVICE = {
 
 def required_service(method: str) -> str | None:
     """Return the external service required by *method*, if any."""
-    return METHOD_SERVICE.get(method)
+    return METHOD_SERVICE.get(LEGACY_METHOD_ALIASES.get(method, method))
 
 
 class ServiceError(RuntimeError):
